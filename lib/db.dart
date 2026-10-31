@@ -47,7 +47,11 @@ class Fuel {
 class DB {
   static late Database db;
   static Future<void> init() async {
-    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 2, onUpgrade: (d, o, n) async { if (o < 2) await seedPrices(d, migrate: true); }, onCreate: (d, v) async {
+    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 3, onUpgrade: (d, o, n) async {
+      if (o < 2) await seedPrices(d, migrate: true);
+      if (o < 3) { await d.execute(_hubSql); await dedupe(d); }
+    }, onCreate: (d, v) async {
+      await d.execute(_hubSql);
       await d.execute('CREATE TABLE trips(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, route TEXT, from_pts TEXT, to_pts TEXT, band_id INTEGER, price INTEGER, note TEXT, vehicle TEXT)');
       await d.execute('CREATE TABLE bands(id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle TEXT, route TEXT, label TEXT, base_price INTEGER, placeholder INTEGER)');
       await d.execute('CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, liters REAL, km REAL)');
@@ -79,6 +83,37 @@ class DB {
     _needRecompute = true;
   }
   static bool _needRecompute = false;
+  static const _hubSql = 'CREATE TABLE IF NOT EXISTS hubs(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lng REAL, note TEXT)';
+
+  static String tripKey(Map t) => '${t['note'] ?? ''}'.trim().isNotEmpty
+      ? 'C:${'${t['note']}'.trim().toUpperCase()}|${t['date']}|${t['from_pts']}|${t['to_pts']}'
+      : 'E:${t['date']}|${t['from_pts']}|${t['to_pts']}|${t['price']}';
+  static String fuelKey(Map f) => '${f['date']}|${(f['liters'] as num).toDouble()}|${(f['km'] as num).toDouble()}';
+
+  /// Xoá chuyến trùng (cùng mã trip; không mã thì cùng ngày+điểm+giá) và xăng trùng (cùng ngày+lít+km). Giữ bản đầu tiên.
+  static Future<(int, int)> dedupe(DatabaseExecutor d) async {
+    var nt = 0, nf = 0;
+    final seen = <String>{};
+    for (final t in await d.query('trips', orderBy: 'id')) {
+      if (!seen.add(tripKey(t))) { await d.delete('trips', where: 'id=?', whereArgs: [t['id']]); nt++; }
+    }
+    seen.clear();
+    for (final f in await d.query('fuel', orderBy: 'id')) {
+      if (!seen.add(fuelKey(f))) { await d.delete('fuel', where: 'id=?', whereArgs: [f['id']]); nf++; }
+    }
+    return (nt, nf);
+  }
+
+  /// Mã trip đã tồn tại ở chuyến khác?
+  static Future<bool> codeExists(String code, {int? exceptId}) async {
+    if (code.trim().isEmpty) return false;
+    final r = await db.rawQuery('SELECT id FROM trips WHERE UPPER(TRIM(note))=? AND id IS NOT ?', [code.trim().toUpperCase(), exceptId]);
+    return r.isNotEmpty;
+  }
+
+  static Future<List<Map<String, Object?>>> hubs() => db.query('hubs', orderBy: 'name COLLATE NOCASE');
+  static Future<void> saveHub(Map<String, Object?> h) async => h['id'] == null ? await db.insert('hubs', Map.of(h)..remove('id')) : await db.update('hubs', h, where: 'id=?', whereArgs: [h['id']]);
+  static Future<void> deleteHub(int id) => db.delete('hubs', where: 'id=?', whereArgs: [id]);
 
   static Future<String> get(String k, [String def = '']) async {
     final r = await db.query('settings', where: 'k=?', whereArgs: [k]);
@@ -127,7 +162,7 @@ class DB {
 
   static Future<Map<String, dynamic>> exportAll() async => {
         'app': 'so_thu_nhap', 'version': 1,
-        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings']) t: await db.query(t),
+        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs']) t: await db.query(t),
       };
   /// Nhận dạng file: định dạng của app này (có 'app') hoặc app Android cũ (trips có 'tripCode').
   static bool isOldFormat(Map<String, dynamic> d) => d['trips'] is List && (d['trips'] as List).isNotEmpty && (d['trips'] as List).first is Map && ((d['trips'] as List).first as Map).containsKey('tripCode');
@@ -137,10 +172,14 @@ class DB {
     final bs = await bands();
     final (gd, gn) = await ghep();
     List<String> split(String? s) => (s ?? '').split('+').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    var inferred = 0, unknown = 0;
+    var inferred = 0, unknown = 0, added = 0, addedFuel = 0;
+    final dupCodes = <String>{};
+    var dupNoCode = 0, dupFuel = 0, skipped = 0;
+    final sameCodeDiffTrip = <String>{};
     await db.transaction((tx) async {
-      await tx.delete('trips');
-      await tx.delete('fuel');
+      final seen = {for (final t in await tx.query('trips')) tripKey(t)};
+      final codesSeen = {for (final t in await tx.query('trips')) '${t['note']}'.toUpperCase()}..remove('');
+      final seenF = {for (final f in await tx.query('fuel')) fuelKey(f)};
       for (final m in (d['trips'] as List).cast<Map>()) {
         final veh = vehicles.contains(m['vehicleType']) ? '${m['vehicleType']}' : vehicles[0];
         final route = routeTypes.contains(m['regionType']) ? '${m['regionType']}' : 'Nội Thành';
@@ -148,37 +187,51 @@ class DB {
         final to = [ '${m['toLocation'] ?? ''}'.trim(), ...split(m['extraDropLoc']) ].where((e) => e.isNotEmpty).toList();
         final opts = bs.where((b) => b.vehicle == veh && b.route == route).toList();
         Band? band;
+        var inf = false;
         final dr = m['distanceRange'];
         if (dr != null && '$dr'.isNotEmpty) band = opts.where((b) => b.label.split(' ').first == '$dr').firstOrNull;
         if (band == null) {
           final base = ((m['amount'] as num?) ?? 0).toInt() - ((m['hasExtraPickup'] as num?) ?? 0).toInt() * gd - ((m['hasExtraDrop'] as num?) ?? 0).toInt() * gn;
           band = opts.where((b) => b.price == base).firstOrNull;
-          band != null ? inferred++ : unknown++;
+          inf = true;
         }
         final t = Trip(date: '${m['date']}', route: route, vehicle: veh, from: from.isEmpty ? [''] : from, to: to.isEmpty ? [''] : to, bandId: band?.id, note: '${m['tripCode'] ?? ''}');
         t.price = await computePrice(t, bs, gd, gn);
+        if (!seen.add(tripKey(t.toMap()))) { t.note.isEmpty ? dupNoCode++ : dupCodes.add(t.note); skipped++; continue; }
+        if (t.note.isNotEmpty && !codesSeen.add(t.note.toUpperCase())) sameCodeDiffTrip.add(t.note);
         await tx.insert('trips', t.toMap()..remove('id'));
+        added++;
+        if (inf) band != null ? inferred++ : unknown++;
         for (final pl in [...from, ...to]) {
           await tx.rawInsert('INSERT INTO places(name, uses) VALUES(?,1) ON CONFLICT(name) DO UPDATE SET uses=uses+1', [pl]);
         }
       }
       for (final f in ((d['fuel'] as List?) ?? []).cast<Map>()) {
-        await tx.insert('fuel', {'date': '${f['date']}', 'liters': (f['liters'] as num).toDouble(), 'km': (f['km'] as num).toDouble()});
+        final row = {'date': '${f['date']}', 'liters': (f['liters'] as num).toDouble(), 'km': (f['km'] as num).toDouble()};
+        if (!seenF.add(fuelKey(row))) { dupFuel++; continue; }
+        await tx.insert('fuel', row);
+        addedFuel++;
       }
       if (d['user_name'] != null) await tx.insert('settings', {'k': 'name', 'v': '${d['user_name']}'}, conflictAlgorithm: ConflictAlgorithm.replace);
       if (d['user_id'] != null) await tx.insert('settings', {'k': 'driver_id', 'v': '${d['user_id']}'}, conflictAlgorithm: ConflictAlgorithm.replace);
     });
-    return 'Đã nhập ${(d['trips'] as List).length} chuyến, ${((d['fuel'] as List?) ?? []).length} lần đổ xăng'
-        '${inferred > 0 ? ', $inferred chuyến suy ra khoảng cách từ giá' : ''}${unknown > 0 ? ', $unknown chuyến chưa xác định khoảng cách' : ''}';
+    lastDupCodes = dupCodes.toList()..sort();
+    return 'Đã thêm $added chuyến, $addedFuel lần đổ xăng.'
+        '${dupCodes.isNotEmpty || dupNoCode > 0 ? ' Bỏ qua $skipped chuyến trùng (${dupCodes.length} mã trip)' : ''}'
+        '${dupFuel > 0 ? ', $dupFuel lần đổ xăng trùng' : ''}'
+        '${sameCodeDiffTrip.isNotEmpty ? '. Lưu ý: mã trùng nhưng khác ngày/tuyến (vẫn giữ): ${sameCodeDiffTrip.join(', ')}' : ''}'
+        '${inferred > 0 ? '. $inferred chuyến suy ra khoảng cách từ giá' : ''}${unknown > 0 ? ', $unknown chuyến chưa xác định khoảng cách' : ''}';
   }
+  static List<String> lastDupCodes = [];
 
   static Future<void> importAll(Map<String, dynamic> data) async {
     await db.transaction((tx) async {
-      for (final t in ['trips', 'bands', 'fuel', 'places', 'settings']) {
+      for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs']) {
         if (data[t] is! List) continue;
         await tx.delete(t);
         for (final row in data[t]) { await tx.insert(t, Map<String, Object?>.from(row)); }
       }
+      await dedupe(tx);
     });
     await recomputeAll();
   }

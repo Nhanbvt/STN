@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'hubs.dart';
 import 'db.dart';
 
 const kRed = Color(0xFFD32F2F);
@@ -68,6 +69,7 @@ class _HomeState extends State<Home> {
                   PopupMenuItem(value: 'stats', child: Text('📊 Thống kê & Nhiên liệu')),
                   PopupMenuItem(value: 'fuel', child: Text('⛽ Cập nhật đổ xăng')),
                   PopupMenuItem(value: 'cal', child: Text('📅 Lịch vận hành')),
+                  PopupMenuItem(value: 'hub', child: Text('📍 Vị trí Hub')),
                   PopupMenuItem(value: 'ghep', child: Text('⚙️ Cài đặt ghép chuyến')),
                   PopupMenuItem(value: 'bang', child: Text('💲 Bảng giá')),
                   PopupMenuItem(value: 'export', child: Text('📤 Xuất dữ liệu')),
@@ -159,6 +161,7 @@ class _HomeState extends State<Home> {
       case 'stats': await Navigator.push(context, MaterialPageRoute(builder: (_) => StatsPage(trips: monthTrips, month: month)));
       case 'fuel': await showDialog(context: context, builder: (_) => const FuelDialog());
       case 'cal': await Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarPage(trips: all, month: month)));
+      case 'hub': await Navigator.push(context, MaterialPageRoute(builder: (_) => const HubPage()));
       case 'ghep': await showDialog(context: context, builder: (_) => const GhepDialog());
       case 'bang': await Navigator.push(context, MaterialPageRoute(builder: (_) => const PricePage()));
       case 'export':
@@ -172,9 +175,13 @@ class _HomeState extends State<Home> {
           final bytes = r.files.single.bytes ?? await File(r.files.single.path!).readAsBytes();
           final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
           if (!mounted) break;
-          final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(title: const Text('Nhập dữ liệu'), content: Text('${DB.isOldFormat(data) ? 'File từ app cũ. ' : ''}Dữ liệu chuyến & xăng hiện tại sẽ bị thay thế. Tiếp tục?'), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('HUỶ')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('NHẬP'))]));
+          final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(title: const Text('Nhập dữ liệu'), content: Text('${DB.isOldFormat(data) ? 'File từ app cũ. ' : ''}${DB.isOldFormat(data) ? 'Chuyến mới sẽ được thêm vào, chuyến trùng mã trip sẽ bỏ qua.' : 'Toàn bộ dữ liệu hiện tại sẽ được thay bằng bản sao lưu.'} Tiếp tục?'), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('HUỶ')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('NHẬP'))]));
           if (ok != true) break;
-          if (DB.isOldFormat(data)) { snack(await DB.importOld(data)); } else { await DB.importAll(data); snack('Đã nhập dữ liệu'); }
+          if (DB.isOldFormat(data)) {
+            final msg = await DB.importOld(data);
+            if (!mounted) break;
+            await showDialog(context: context, builder: (c) => AlertDialog(title: const Text('Kết quả nhập'), content: SingleChildScrollView(child: Text(msg + (DB.lastDupCodes.isEmpty ? '' : '\n\nMã trip đã có (không thêm):\n${DB.lastDupCodes.join('\n')}'))), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))]));
+          } else { await DB.importAll(data); snack('Đã nhập dữ liệu'); }
         } catch (e) { snack('Lỗi nhập: $e'); }
     }
     load();
@@ -265,6 +272,11 @@ class _TripDialogState extends State<TripDialog> {
         FilledButton(onPressed: () async {
           if (from.first.text.trim().isEmpty || to.first.text.trim().isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhập nơi đi và nơi đến')));
+            return;
+          }
+          if (await DB.codeExists(note.text, exceptId: widget.trip?.id)) {
+            if (!context.mounted) return;
+            await showDialog(context: context, builder: (c) => AlertDialog(title: const Text('Trùng mã trip'), content: Text('Mã trip "${note.text.trim()}" đã có trong sổ. Chuyến này sẽ không được lưu thêm.'), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))]));
             return;
           }
           await DB.saveTrip(Trip(id: widget.trip?.id, date: date.text, route: route, vehicle: vehicle, from: from.map((c) => c.text.trim()).where((e) => e.isNotEmpty).toList(), to: to.map((c) => c.text.trim()).where((e) => e.isNotEmpty).toList(), bandId: bandId, note: note.text.trim()));
