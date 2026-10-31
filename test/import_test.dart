@@ -7,7 +7,8 @@ import 'package:so_thu_nhap/db.dart';
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
-  test('import old Android export', () async {
+  final fx = File('test/fixtures/old_export.json');
+  test('import old Android export', skip: fx.existsSync() ? false : 'fixture (dữ liệu cá nhân) không có trong repo', () async {
     await DB.init();
     final d = jsonDecode(File('test/fixtures/old_export.json').readAsStringSync()) as Map<String, dynamic>;
     expect(DB.isOldFormat(d), true);
