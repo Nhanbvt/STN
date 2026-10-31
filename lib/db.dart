@@ -129,6 +129,49 @@ class DB {
         'app': 'so_thu_nhap', 'version': 1,
         for (final t in ['trips', 'bands', 'fuel', 'places', 'settings']) t: await db.query(t),
       };
+  /// Nhận dạng file: định dạng của app này (có 'app') hoặc app Android cũ (trips có 'tripCode').
+  static bool isOldFormat(Map<String, dynamic> d) => d['trips'] is List && (d['trips'] as List).isNotEmpty && (d['trips'] as List).first is Map && ((d['trips'] as List).first as Map).containsKey('tripCode');
+
+  /// Nhập file app cũ. Trả về báo cáo ngắn.
+  static Future<String> importOld(Map<String, dynamic> d) async {
+    final bs = await bands();
+    final (gd, gn) = await ghep();
+    List<String> split(String? s) => (s ?? '').split('+').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    var inferred = 0, unknown = 0;
+    await db.transaction((tx) async {
+      await tx.delete('trips');
+      await tx.delete('fuel');
+      for (final m in (d['trips'] as List).cast<Map>()) {
+        final veh = vehicles.contains(m['vehicleType']) ? '${m['vehicleType']}' : vehicles[0];
+        final route = routeTypes.contains(m['regionType']) ? '${m['regionType']}' : 'Nội Thành';
+        final from = [ '${m['fromLocation'] ?? ''}'.trim(), ...split(m['extraPickupLoc']) ].where((e) => e.isNotEmpty).toList();
+        final to = [ '${m['toLocation'] ?? ''}'.trim(), ...split(m['extraDropLoc']) ].where((e) => e.isNotEmpty).toList();
+        final opts = bs.where((b) => b.vehicle == veh && b.route == route).toList();
+        Band? band;
+        final dr = m['distanceRange'];
+        if (dr != null && '$dr'.isNotEmpty) band = opts.where((b) => b.label.split(' ').first == '$dr').firstOrNull;
+        if (band == null) {
+          final base = ((m['amount'] as num?) ?? 0).toInt() - ((m['hasExtraPickup'] as num?) ?? 0).toInt() * gd - ((m['hasExtraDrop'] as num?) ?? 0).toInt() * gn;
+          band = opts.where((b) => b.price == base).firstOrNull;
+          band != null ? inferred++ : unknown++;
+        }
+        final t = Trip(date: '${m['date']}', route: route, vehicle: veh, from: from.isEmpty ? [''] : from, to: to.isEmpty ? [''] : to, bandId: band?.id, note: '${m['tripCode'] ?? ''}');
+        t.price = await computePrice(t, bs, gd, gn);
+        await tx.insert('trips', t.toMap()..remove('id'));
+        for (final pl in [...from, ...to]) {
+          await tx.rawInsert('INSERT INTO places(name, uses) VALUES(?,1) ON CONFLICT(name) DO UPDATE SET uses=uses+1', [pl]);
+        }
+      }
+      for (final f in ((d['fuel'] as List?) ?? []).cast<Map>()) {
+        await tx.insert('fuel', {'date': '${f['date']}', 'liters': (f['liters'] as num).toDouble(), 'km': (f['km'] as num).toDouble()});
+      }
+      if (d['user_name'] != null) await tx.insert('settings', {'k': 'name', 'v': '${d['user_name']}'}, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (d['user_id'] != null) await tx.insert('settings', {'k': 'driver_id', 'v': '${d['user_id']}'}, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+    return 'Đã nhập ${(d['trips'] as List).length} chuyến, ${((d['fuel'] as List?) ?? []).length} lần đổ xăng'
+        '${inferred > 0 ? ', $inferred chuyến suy ra khoảng cách từ giá' : ''}${unknown > 0 ? ', $unknown chuyến chưa xác định khoảng cách' : ''}';
+  }
+
   static Future<void> importAll(Map<String, dynamic> data) async {
     await db.transaction((tx) async {
       for (final t in ['trips', 'bands', 'fuel', 'places', 'settings']) {

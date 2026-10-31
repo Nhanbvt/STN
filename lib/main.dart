@@ -170,8 +170,11 @@ class _HomeState extends State<Home> {
         if (r == null) break;
         try {
           final bytes = r.files.single.bytes ?? await File(r.files.single.path!).readAsBytes();
-          await DB.importAll(jsonDecode(utf8.decode(bytes)));
-          snack('Đã nhập dữ liệu');
+          final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+          if (!mounted) break;
+          final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(title: const Text('Nhập dữ liệu'), content: Text('${DB.isOldFormat(data) ? 'File từ app cũ. ' : ''}Dữ liệu chuyến & xăng hiện tại sẽ bị thay thế. Tiếp tục?'), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('HUỶ')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('NHẬP'))]));
+          if (ok != true) break;
+          if (DB.isOldFormat(data)) { snack(await DB.importOld(data)); } else { await DB.importAll(data); snack('Đã nhập dữ liệu'); }
         } catch (e) { snack('Lỗi nhập: $e'); }
     }
     load();
