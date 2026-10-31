@@ -258,7 +258,6 @@ class _TripDialogState extends State<TripDialog> {
           if (d != null) setState(() => date.text = ymd(d));
         }),
         const SizedBox(height: 8),
-        DropdownButtonFormField(value: vehicle, decoration: const InputDecoration(labelText: 'Loại xe'), items: [for (final v in vehicles) DropdownMenuItem(value: v, child: Text(v))], onChanged: (v) => setState(() => vehicle = v!)),
         DropdownButtonFormField(value: route, decoration: const InputDecoration(labelText: 'Loại hành trình'), items: [for (final r in routeTypes) DropdownMenuItem(value: r, child: Text(r))], onChanged: (v) => setState(() => route = v!)),
         const SizedBox(height: 12),
         for (var i = 0; i < from.length; i++) placeField(from[i], i == 0 ? 'Nơi đi (điểm chính)' : 'Điểm đi ghép $i', i == 0 ? null : () => setState(() => from.removeAt(i))),
