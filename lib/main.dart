@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'hubs.dart';
+import 'updater.dart';
 import 'db.dart';
 
 const kRed = Color(0xFFD32F2F);
@@ -38,7 +39,7 @@ class _HomeState extends State<Home> {
   String q = '', name = '', driverId = '', vehicle = vehicles[0];
 
   @override
-  void initState() { super.initState(); load(); }
+  void initState() { super.initState(); load(); WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, silent: true)); }
 
   Future<void> load() async {
     all = await DB.trips();
@@ -74,6 +75,7 @@ class _HomeState extends State<Home> {
                   PopupMenuItem(value: 'bang', child: Text('💲 Bảng giá')),
                   PopupMenuItem(value: 'export', child: Text('📤 Xuất dữ liệu')),
                   PopupMenuItem(value: 'import', child: Text('📥 Nhập dữ liệu')),
+                  PopupMenuItem(value: 'update', child: Text('🔄 Kiểm tra cập nhật')),
                 ]),
               ]),
               Row(children: [
@@ -112,10 +114,10 @@ class _HomeState extends State<Home> {
               title: Row(children: [
                 Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: kOrange.withValues(alpha: .15), borderRadius: BorderRadius.circular(10)), child: Text(t.date.substring(5).split('-').reversed.join('/'), style: const TextStyle(color: kRed, fontWeight: FontWeight.bold))),
                 const SizedBox(width: 8),
-                Expanded(child: Text(t.note.isEmpty ? t.route : t.note, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(t.note.isEmpty ? t.route : t.note, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis)),
                 Text(vnd(t.price), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
               ]),
-              subtitle: Text('${t.fromText} → ${t.toText}'),
+              subtitle: Padding(padding: const EdgeInsets.only(top: 4), child: Text('${t.fromText} → ${t.toText}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87))),
               trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => deleteTrip(t)),
             ));
           },
@@ -161,6 +163,7 @@ class _HomeState extends State<Home> {
       case 'stats': await Navigator.push(context, MaterialPageRoute(builder: (_) => StatsPage(trips: monthTrips, month: month)));
       case 'fuel': await showDialog(context: context, builder: (_) => const FuelDialog());
       case 'cal': await Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarPage(trips: all, month: month)));
+      case 'update': await checkForUpdate(context, silent: false);
       case 'hub': await Navigator.push(context, MaterialPageRoute(builder: (_) => const HubPage()));
       case 'ghep': await showDialog(context: context, builder: (_) => const GhepDialog());
       case 'bang': await Navigator.push(context, MaterialPageRoute(builder: (_) => const PricePage()));

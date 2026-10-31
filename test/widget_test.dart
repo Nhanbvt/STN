@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:so_thu_nhap/db.dart';
+import 'package:so_thu_nhap/updater.dart';
 
 void main() {
   test('payroll & price', () {
@@ -10,5 +11,10 @@ void main() {
     expect(p.cong, 28.5);
     expect(p.luong, 5310000);
     expect(p.tangCa, (2.5 * 5310000 / 26 * 2).round());
+  });
+  test('version compare', () {
+    expect(compareVersions('1.0.12', '1.0.9'), 1);
+    expect(compareVersions('v1.0.6', '1.0.6'), 0);
+    expect(compareVersions('1.0.5', '1.0.6'), -1);
   });
 }

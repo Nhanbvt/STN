@@ -14,7 +14,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build ios --no-codesign --release
+      - run: flutter build ios --no-codesign --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
@@ -27,6 +27,8 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -38,9 +40,29 @@ jobs:
           flutter-version: '3.27.1'
           channel: stable
           cache: true
+      - name: Restore release keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          test -n "$KS_B64" || { echo "Missing keystore secret"; exit 1; }
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n' "$KS_PASS" "$KEY_PASS" "$KEY_ALIAS" "$RUNNER_TEMP/release.jks" > android/key.properties
       - run: flutter pub get
-      - run: flutter build apk --release
+      - run: flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+      - run: cp build/app/outputs/flutter-apk/app-release.apk SoThuNhap-1.0.${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         with:
           name: SoThuNhap-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: SoThuNhap-1.0.${{ github.run_number }}.apk
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Sổ Thu Nhập 1.0.${{ github.run_number }}
+          body: ${{ github.event.head_commit.message }}
+          files: SoThuNhap-1.0.${{ github.run_number }}.apk
+          make_latest: true

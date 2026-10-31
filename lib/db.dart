@@ -47,6 +47,7 @@ class Fuel {
 class DB {
   static late Database db;
   static Future<void> init() async {
+    // QUY TẮC: migration chỉ được THÊM (bảng/cột mới), không xoá dữ liệu người dùng.
     db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 3, onUpgrade: (d, o, n) async {
       if (o < 2) await seedPrices(d, migrate: true);
       if (o < 3) { await d.execute(_hubSql); await dedupe(d); }
