@@ -49,11 +49,13 @@ class DB {
   static late Database db;
   static Future<void> init() async {
     // QUY TẮC: migration chỉ được THÊM (bảng/cột mới), không xoá dữ liệu người dùng.
-    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 3, onUpgrade: (d, o, n) async {
+    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 4, onUpgrade: (d, o, n) async {
       if (o < 2) await seedPrices(d, migrate: true);
       if (o < 3) { await d.execute(_hubSql); await dedupe(d); }
+      if (o < 4) await d.execute(_phoneSql);
     }, onCreate: (d, v) async {
       await d.execute(_hubSql);
+      await d.execute(_phoneSql);
       await d.execute('CREATE TABLE trips(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, route TEXT, from_pts TEXT, to_pts TEXT, band_id INTEGER, price INTEGER, note TEXT, vehicle TEXT)');
       await d.execute('CREATE TABLE bands(id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle TEXT, route TEXT, label TEXT, base_price INTEGER, placeholder INTEGER)');
       await d.execute('CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, liters REAL, km REAL)');
@@ -113,25 +115,71 @@ class DB {
     return r.isNotEmpty;
   }
 
-  /// Thêm hub có sẵn (chỉ chèn tên chưa có, không sửa/xoá dữ liệu người dùng). Chạy 1 lần mỗi phiên bản seed.
-  static Future<void> seedHubs() async {
-    const ver = '1';
-    if (await get('hub_seed_v') == ver) return;
-    final have = (await db.query('hubs', columns: ['name'])).map((e) => '${e['name']}'.trim().toLowerCase()).toSet();
+  static const _phoneSql = 'CREATE TABLE IF NOT EXISTS phones(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, note TEXT)';
+  static String key(Object? s) => '${s ?? ''}'.trim().toLowerCase();
+
+  /// Tên hub mẫu mà người dùng đã xoá (để không thêm lại).
+  static Future<Set<String>> _seedDeleted() async => (await get('hub_seed_deleted')).split('\n').where((e) => e.isNotEmpty).toSet();
+
+  /// Mỗi lần mở app: thêm các hub mẫu CHƯA có (theo tên, không phân biệt hoa thường).
+  /// Không sửa/xoá hub của người dùng; hub mẫu người dùng đã xoá sẽ không bị thêm lại.
+  static Future<int> seedHubs() async {
+    final have = (await db.query('hubs', columns: ['name'])).map((e) => key(e['name'])).toSet();
+    final deleted = await _seedDeleted();
+    if (await get('hub_seed_v') == '1' && await get('hub_seed_deleted_init') != '1') {
+      // Bản 1.0.8 seed một lần: hub mẫu đang thiếu nghĩa là người dùng đã xoá.
+      for (final h in hubSeed) { if (!have.contains(key(h.$1))) deleted.add(key(h.$1)); }
+      await set('hub_seed_deleted', deleted.join('\n'));
+    }
+    await set('hub_seed_deleted_init', '1');
+    var added = 0;
     final b = db.batch();
     for (final h in hubSeed) {
-      if (!have.add(h.$1.trim().toLowerCase())) continue;
+      final k = key(h.$1);
+      if (deleted.contains(k) || !have.add(k)) continue;
       final note = [h.$4, if (h.$2 == null) h.$5].where((e) => e.isNotEmpty).join('\n');
       b.insert('hubs', {'name': h.$1, 'lat': h.$2, 'lng': h.$3, 'note': note});
       b.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h.$1]);
+      added++;
     }
     await b.commit(noResult: true);
-    await set('hub_seed_v', ver);
+    await set('hub_seed_v', '2');
+    return added;
+  }
+
+  static Future<List<Map<String, Object?>>> phones() => db.query('phones', orderBy: 'name COLLATE NOCASE');
+  static Future<void> savePhone(Map<String, Object?> h) async {
+    h['id'] == null ? await db.insert('phones', Map.of(h)..remove('id')) : await db.update('phones', h, where: 'id=?', whereArgs: [h['id']]);
+    await db.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h['name']]);
+  }
+  static Future<void> deletePhone(int id) => db.delete('phones', where: 'id=?', whereArgs: [id]);
+
+  /// So khớp danh sách nhập theo tên: trả về (mới, thay đổi[(cũ, mới)]).
+  static (List<Map<String, Object?>>, List<(Map<String, Object?>, Map<String, Object?>)>) diff(List<Map<String, Object?>> mine, List<Map<String, Object?>> inc, List<String> fields) {
+    final byName = {for (final m in mine) key(m['name']): m};
+    final add = <Map<String, Object?>>[];
+    final chg = <(Map<String, Object?>, Map<String, Object?>)>[];
+    final seen = <String>{};
+    for (final r in inc) {
+      final k = key(r['name']);
+      if (k.isEmpty || !seen.add(k)) continue;
+      final old = byName[k];
+      if (old == null) { add.add(r); continue; }
+      bool same(String f) { final a = old[f], b = r[f]; if (a is num || b is num) { return a is num && b is num ? (a - b).abs() < 1e-7 : '${a ?? ''}'.trim() == '${b ?? ''}'.trim(); } return '${a ?? ''}'.trim() == '${b ?? ''}'.trim(); }
+      if (fields.any((f) => (r[f] != null && '${r[f]}'.trim().isNotEmpty) && !same(f))) chg.add((old, r));
+    }
+    return (add, chg);
   }
 
   static Future<List<Map<String, Object?>>> hubs() => db.query('hubs', orderBy: 'name COLLATE NOCASE');
   static Future<void> saveHub(Map<String, Object?> h) async => h['id'] == null ? await db.insert('hubs', Map.of(h)..remove('id')) : await db.update('hubs', h, where: 'id=?', whereArgs: [h['id']]);
-  static Future<void> deleteHub(int id) => db.delete('hubs', where: 'id=?', whereArgs: [id]);
+  static Future<void> deleteHub(int id) async {
+    final r = await db.query('hubs', where: 'id=?', whereArgs: [id]);
+    await db.delete('hubs', where: 'id=?', whereArgs: [id]);
+    if (r.isEmpty) return;
+    final k = key(r.first['name']);
+    if (hubSeed.any((h) => key(h.$1) == k)) await set('hub_seed_deleted', ({...await _seedDeleted(), k}).join('\n'));
+  }
 
   static Future<String> get(String k, [String def = '']) async {
     final r = await db.query('settings', where: 'k=?', whereArgs: [k]);
@@ -180,7 +228,7 @@ class DB {
 
   static Future<Map<String, dynamic>> exportAll() async => {
         'app': 'so_thu_nhap', 'version': 1,
-        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs']) t: await db.query(t),
+        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) t: await db.query(t),
       };
   /// Nhận dạng file: định dạng của app này (có 'app') hoặc app Android cũ (trips có 'tripCode').
   static bool isOldFormat(Map<String, dynamic> d) => d['trips'] is List && (d['trips'] as List).isNotEmpty && (d['trips'] as List).first is Map && ((d['trips'] as List).first as Map).containsKey('tripCode');
@@ -244,7 +292,7 @@ class DB {
 
   static Future<void> importAll(Map<String, dynamic> data) async {
     await db.transaction((tx) async {
-      for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs']) {
+      for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) {
         if (data[t] is! List) continue;
         await tx.delete(t);
         for (final row in data[t]) { await tx.insert(t, Map<String, Object?>.from(row)); }

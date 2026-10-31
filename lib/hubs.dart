@@ -4,6 +4,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'db.dart';
+import 'exchange.dart';
+
+const hubFields = ['name', 'lat', 'lng', 'note'];
 
 const _red = Color(0xFFD32F2F);
 
@@ -92,7 +95,12 @@ class _HubPageState extends State<HubPage> {
   Widget build(BuildContext context) {
     final shown = hubs.where((h) => q.isEmpty || '${h['name']} ${h['note']}'.toLowerCase().contains(q.toLowerCase())).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Vị trí Hub'), backgroundColor: _red, foregroundColor: Colors.white),
+      appBar: AppBar(title: const Text('Vị trí Hub'), backgroundColor: _red, foregroundColor: Colors.white, actions: [
+        PopupMenuButton<String>(onSelected: (v) async {
+          if (v == 'exp') await exportItems(context, 'hubs', 'Vị trí Hub', hubs, hubFields);
+          if (v == 'imp' && await importItems(context, 'hubs', 'Vị trí Hub', hubFields, DB.hubs, DB.saveHub)) load();
+        }, itemBuilder: (_) => const [PopupMenuItem(value: 'exp', child: Text('📤 Xuất file')), PopupMenuItem(value: 'imp', child: Text('📥 Nhập & đối chiếu file'))]),
+      ]),
       floatingActionButton: FloatingActionButton(backgroundColor: _red, foregroundColor: Colors.white, onPressed: () => edit(), child: const Icon(Icons.add_location_alt)),
       body: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => q = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Tìm hub...', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(30))))),

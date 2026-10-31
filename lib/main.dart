@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'hubs.dart';
+import 'phones.dart';
 import 'updater.dart';
 import 'db.dart';
 
@@ -72,6 +73,7 @@ class _HomeState extends State<Home> {
                   PopupMenuItem(value: 'fuel', child: Text('⛽ Cập nhật đổ xăng')),
                   PopupMenuItem(value: 'cal', child: Text('📅 Lịch vận hành')),
                   PopupMenuItem(value: 'hub', child: Text('📍 Vị trí Hub')),
+                  PopupMenuItem(value: 'phone', child: Text('📞 Số ĐT Hub')),
                   PopupMenuItem(value: 'ghep', child: Text('⚙️ Cài đặt ghép chuyến')),
                   PopupMenuItem(value: 'bang', child: Text('💲 Bảng giá')),
                   PopupMenuItem(value: 'export', child: Text('📤 Xuất dữ liệu')),
@@ -96,7 +98,10 @@ class _HomeState extends State<Home> {
                 if (p.congTangCa > 0) stat('Tăng ca (${fmtNum(p.congTangCa)} công x2)', vnd(p.tangCa)),
               ]),
               const SizedBox(height: 8),
-              Text('TỔNG CỘNG: ${vnd(p.tong)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.yellowAccent)),
+              Center(child: Column(children: [
+                const Text('TỔNG CỘNG', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white70, letterSpacing: 1)),
+                Text(vnd(p.tong), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.yellowAccent)),
+              ])),
             ]),
           ),
         ),
@@ -130,7 +135,6 @@ class _HomeState extends State<Home> {
             ));
           },
         )),
-        const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Tác giả: Bùi Văn Trung Nhân', style: TextStyle(color: Colors.grey, fontSize: 12))),
       ]),
     );
   }
@@ -172,6 +176,7 @@ class _HomeState extends State<Home> {
       case 'fuel': await showDialog(context: context, builder: (_) => const FuelDialog());
       case 'cal': await Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarPage(trips: all, month: month)));
       case 'update': await checkForUpdate(context, silent: false);
+      case 'phone': await Navigator.push(context, MaterialPageRoute(builder: (_) => const PhonePage()));
       case 'hub': await Navigator.push(context, MaterialPageRoute(builder: (_) => const HubPage()));
       case 'ghep': await showDialog(context: context, builder: (_) => const GhepDialog());
       case 'bang': await Navigator.push(context, MaterialPageRoute(builder: (_) => const PricePage()));
