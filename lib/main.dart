@@ -516,7 +516,7 @@ class _PricePageState extends State<PricePage> {
         ]),
         body: ListView(padding: const EdgeInsets.all(12), children: [
           DropdownButtonFormField(value: vehicle, decoration: const InputDecoration(labelText: 'Loại xe'), items: [for (final v in vehicles) DropdownMenuItem(value: v, child: Text(v))], onChanged: (v) => setState(() => vehicle = v!)),
-          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nhập giá gốc. Nội Thành tự nhân x1.28. Mục "(tạm)" là giá chờ cập nhật. Sửa giá sẽ tự tính lại tất cả chuyến.\nCSV: vehicle,route,label,base_price', style: TextStyle(fontSize: 12, color: Colors.grey))),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nhập giá gốc. Nội Thành tự nhân x1.28. Sửa giá sẽ tự tính lại tất cả chuyến.\nCSV: vehicle,route,label,base_price', style: TextStyle(fontSize: 12, color: Colors.grey))),
           for (final r in routeTypes) Card(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             ListTile(title: Text(r, style: const TextStyle(fontWeight: FontWeight.bold, color: kRed)), trailing: IconButton(icon: const Icon(Icons.add), onPressed: () => edit(null, r))),
             for (final b in bands.where((b) => b.vehicle == vehicle && b.route == r)) ListTile(

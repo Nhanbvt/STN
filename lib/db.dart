@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
+import 'price_table.dart';
 
 const vehicles = ['Xe Van < 1 Tấn', 'Xe Tải 2 Tấn', 'Xe Tải 5 Tấn', 'Xe Tải 8 Tấn'];
 const routeTypes = ['Nội Thành', 'Nội Vùng', 'Liên Vùng'];
@@ -46,27 +47,38 @@ class Fuel {
 class DB {
   static late Database db;
   static Future<void> init() async {
-    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 1, onCreate: (d, v) async {
+    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 2, onUpgrade: (d, o, n) async { if (o < 2) await seedPrices(d, migrate: true); }, onCreate: (d, v) async {
       await d.execute('CREATE TABLE trips(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, route TEXT, from_pts TEXT, to_pts TEXT, band_id INTEGER, price INTEGER, note TEXT, vehicle TEXT)');
       await d.execute('CREATE TABLE bands(id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle TEXT, route TEXT, label TEXT, base_price INTEGER, placeholder INTEGER)');
       await d.execute('CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, liters REAL, km REAL)');
       await d.execute('CREATE TABLE places(name TEXT PRIMARY KEY, uses INTEGER)');
       await d.execute('CREATE TABLE settings(k TEXT PRIMARY KEY, v TEXT)');
-      // Seed: chỉ 0-15KM Xe Van là giá thật; còn lại là giá TẠM, cần sửa.
-      final seeds = <Band>[];
-      for (final v in vehicles) {
-        for (final r in routeTypes) {
-          final real = v == vehicles[0];
-          seeds.add(Band(vehicle: v, route: r, label: '0-15 KM', basePrice: 56000, placeholder: !real));
-          seeds.add(Band(vehicle: v, route: r, label: '15-30 KM (TẠM - sửa)', basePrice: 0, placeholder: true));
-        }
-      }
-      for (final b in seeds) { await d.insert('bands', b.toMap()..remove('id')); }
+      await seedPrices(d);
       for (final e in {'gia_ghep_di': '30000', 'gia_ghep_den': '30000', 'name': 'Bùi Văn Trung Nhân', 'driver_id': '', 'vehicle': vehicles[0]}.entries) {
         await d.insert('settings', {'k': e.key, 'v': e.value});
       }
     });
+    if (_needRecompute) await recomputeAll();
   }
+
+  /// Nạp bảng giá đầy đủ; khi migrate thì gán lại band cho chuyến cũ theo nhãn km rồi tính lại giá.
+  static Future<void> seedPrices(Database d, {bool migrate = false}) async {
+    final old = {for (final r in await d.query('bands')) r['id']: r};
+    await d.delete('bands');
+    final ids = <String, int>{};
+    for (final (v, r, l, pr) in priceTable) {
+      ids['$v|$r|$l'] = await d.insert('bands', {'vehicle': v, 'route': r, 'label': l, 'base_price': pr, 'placeholder': 0});
+    }
+    if (!migrate) return;
+    for (final t in await d.query('trips')) {
+      final ob = old[t['band_id']];
+      final lbl = ob == null ? '' : '${ob['label']}'.split(' ').first;
+      final key = ids.keys.firstWhere((k) => k.startsWith('${t['vehicle']}|${t['route']}|$lbl '), orElse: () => ids.keys.firstWhere((k) => k.startsWith('${t['vehicle']}|${t['route']}|'), orElse: () => ''));
+      await d.update('trips', {'band_id': ids[key]}, where: 'id=?', whereArgs: [t['id']]);
+    }
+    _needRecompute = true;
+  }
+  static bool _needRecompute = false;
 
   static Future<String> get(String k, [String def = '']) async {
     final r = await db.query('settings', where: 'k=?', whereArgs: [k]);
