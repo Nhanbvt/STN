@@ -19,6 +19,7 @@ String fmtNum(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toS
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DB.init();
+  try { await DB.seedHubs(); } catch (_) {}
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Sổ Thu Nhập',
@@ -108,17 +109,24 @@ class _HomeState extends State<Home> {
           itemCount: shown.length,
           itemBuilder: (_, i) {
             final t = shown[i];
-            return Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), child: ListTile(
+            return Card(margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: InkWell(
               onTap: () => editTrip(t),
               onLongPress: () => deleteTrip(t),
-              title: Row(children: [
-                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: kOrange.withValues(alpha: .15), borderRadius: BorderRadius.circular(10)), child: Text(t.date.substring(5).split('-').reversed.join('/'), style: const TextStyle(color: kRed, fontWeight: FontWeight.bold))),
-                const SizedBox(width: 8),
-                Expanded(child: Text(t.note.isEmpty ? t.route : t.note, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis)),
-                Text(vnd(t.price), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-              ]),
-              subtitle: Padding(padding: const EdgeInsets.only(top: 4), child: Text('${t.fromText} → ${t.toText}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87))),
-              trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => deleteTrip(t)),
+              child: Padding(padding: const EdgeInsets.fromLTRB(10, 8, 0, 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: kOrange.withValues(alpha: .15), borderRadius: BorderRadius.circular(10)), child: Text(t.date.substring(5).split('-').reversed.join('/'), style: const TextStyle(color: kRed, fontWeight: FontWeight.bold, fontSize: 13))),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(t.note.isEmpty ? t.route : t.note, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), softWrap: true)),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text('${t.fromText} → ${t.toText}', softWrap: true, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+                ])),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Padding(padding: const EdgeInsets.only(left: 4, right: 2), child: Text(vnd(t.price), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13))),
+                  IconButton(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36, minHeight: 32), iconSize: 20, icon: const Icon(Icons.delete_outline), onPressed: () => deleteTrip(t)),
+                ]),
+              ])),
             ));
           },
         )),

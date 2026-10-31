@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
+import 'hub_seed.dart';
 import 'price_table.dart';
 
 const vehicles = ['Xe Van < 1 Tấn', 'Xe Tải 2 Tấn', 'Xe Tải 5 Tấn', 'Xe Tải 8 Tấn'];
@@ -110,6 +111,22 @@ class DB {
     if (code.trim().isEmpty) return false;
     final r = await db.rawQuery('SELECT id FROM trips WHERE UPPER(TRIM(note))=? AND id IS NOT ?', [code.trim().toUpperCase(), exceptId]);
     return r.isNotEmpty;
+  }
+
+  /// Thêm hub có sẵn (chỉ chèn tên chưa có, không sửa/xoá dữ liệu người dùng). Chạy 1 lần mỗi phiên bản seed.
+  static Future<void> seedHubs() async {
+    const ver = '1';
+    if (await get('hub_seed_v') == ver) return;
+    final have = (await db.query('hubs', columns: ['name'])).map((e) => '${e['name']}'.trim().toLowerCase()).toSet();
+    final b = db.batch();
+    for (final h in hubSeed) {
+      if (!have.add(h.$1.trim().toLowerCase())) continue;
+      final note = [h.$4, if (h.$2 == null) h.$5].where((e) => e.isNotEmpty).join('\n');
+      b.insert('hubs', {'name': h.$1, 'lat': h.$2, 'lng': h.$3, 'note': note});
+      b.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h.$1]);
+    }
+    await b.commit(noResult: true);
+    await set('hub_seed_v', ver);
   }
 
   static Future<List<Map<String, Object?>>> hubs() => db.query('hubs', orderBy: 'name COLLATE NOCASE');
