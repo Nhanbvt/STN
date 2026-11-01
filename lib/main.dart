@@ -105,10 +105,10 @@ class _HomeState extends State<Home> {
               GestureDetector(onTap: chooseVehicle, child: Text('🚐 $vehicle ▾', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
               const SizedBox(height: 10),
               Wrap(spacing: 18, runSpacing: 6, children: [
-                stat('Số chuyến', '${p.trips}'),
+                stat('Số chuyến', '${p.trips}', eye: true),
                 stat('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
-                stat('Tiền chuyến', vndH(p.tripMoney), eye: true),
-                stat('Tiền công', vndH(p.luong), eye: true),
+                stat('Tiền chuyến', vndH(p.tripMoney)),
+                stat('Tiền công', vndH(p.luong)),
                 if (p.congTangCa > 0) stat('Tăng ca (${fmtNum(p.congTangCa)} công x2)', vnd(p.tangCa)),
               ]),
               const SizedBox(height: 8),
