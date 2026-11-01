@@ -93,7 +93,12 @@ Future<bool> importItems(BuildContext context, String kind, String title, List<S
   for (final a in add) { await save({...a, 'id': null}); }
   for (final i in pick) {
     final (old, n) = chg[i];
-    await save({...old, for (final f in fields) if (f != 'name' && n[f] != null && '${n[f]}'.trim().isNotEmpty) f: n[f]});
+    final upd = {...old, for (final f in fields) if (f != 'name' && n[f] != null && '${n[f]}'.trim().isNotEmpty) f: n[f]};
+    // Vị trí Hub: đổi toạ độ cũng tính vào giới hạn 2 lần/tháng; hết lượt → giữ toạ độ cũ.
+    if (kind == 'hubs' && old['lat'] != null && ('${upd['lat']}' != '${old['lat']}' || '${upd['lng']}' != '${old['lng']}') && !await DB.useLocEdit(old['name'])) {
+      upd['lat'] = old['lat']; upd['lng'] = old['lng'];
+    }
+    await save(upd);
   }
   m.showSnackBar(SnackBar(content: Text('Đã thêm ${add.length}, cập nhật ${pick.length} mục')));
   return true;

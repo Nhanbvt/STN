@@ -218,6 +218,20 @@ class DB {
     if (hubSeed.any((h) => key(h.$1) == k)) await set('hub_seed_deleted', ({...await _seedDeleted(), k}).join('\n'));
   }
 
+  /// Giới hạn sửa vị trí: tối đa [kLocEditsPerMonth] lần / hub / tháng. Lưu ở settings 'loc_edit:<hub>' = 'YYYY-MM:n'.
+  static Future<bool> useLocEdit(Object? hubName) async {
+    final k = 'loc_edit:${key(hubName)}';
+    final (ok, v) = locEditStep(await get(k), DateTime.now());
+    if (ok) await set(k, v);
+    return ok;
+  }
+  static Future<int> locEditsLeft(Object? hubName) async {
+    final s = await get('loc_edit:${key(hubName)}');
+    final m = DateTime.now().toIso8601String().substring(0, 7);
+    final p = s.split(':');
+    return kLocEditsPerMonth - (p.length == 2 && p[0] == m ? int.tryParse(p[1]) ?? 0 : 0);
+  }
+
   static Future<String> get(String k, [String def = '']) async {
     final r = await db.query('settings', where: 'k=?', whereArgs: [k]);
     return r.isEmpty ? def : '${r.first['v']}';
@@ -370,4 +384,16 @@ class Payroll {
     final thuong = cong > congChuan ? congChuan.toDouble() : cong;
     return Payroll(perDay.length, ts.length, ts.fold(0, (s, t) => s + t.price), cong, thuong, cong - thuong);
   }
+}
+
+const kLocEditsPerMonth = 2;
+const kLocLimitMsg = 'Đã sửa vị trí 2 lần trong tháng này';
+
+/// (được phép?, giá trị lưu mới) cho 1 lần sửa vị trí vào thời điểm [now].
+(bool, String) locEditStep(String stored, DateTime now) {
+  final m = now.toIso8601String().substring(0, 7);
+  final p = stored.split(':');
+  final n = p.length == 2 && p[0] == m ? int.tryParse(p[1]) ?? 0 : 0;
+  if (n >= kLocEditsPerMonth) return (false, stored);
+  return (true, '$m:${n + 1}');
 }

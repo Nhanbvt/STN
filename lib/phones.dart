@@ -48,6 +48,15 @@ class _PhonePageState extends State<PhonePage> {
     if (r == true) load();
   }
 
+  Future<void> toggleInactive(Map<String, Object?> h, Contact c) async {
+    final cs = contactsOf(h);
+    final t = cs.where((x) => x.phone == c.phone && x.name == c.name && x.title == c.title).firstOrNull;
+    if (t == null) return;
+    t.inactive = !t.inactive;
+    await DB.savePhone({...h, 'contacts': cs});
+    load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final shown = rows.where((h) => q.isEmpty || '${h['name']} ${contactsOf(h).map((c) => '${c.label} ${c.digits}').join(' ')} ${h['note']}'.toLowerCase().contains(q.toLowerCase())).toList();
@@ -74,6 +83,10 @@ class _PhonePageState extends State<PhonePage> {
                   for (final c in cs) Opacity(opacity: c.inactive ? 0.45 : 1, child: InkWell(onTap: () => call(c.phone), child: Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
                     Icon(c.inactive ? Icons.phone_disabled : Icons.call, size: 16, color: c.inactive ? Colors.grey : Colors.green), const SizedBox(width: 6),
                     Expanded(child: Text(c.inactive ? '${c.label} (không dùng nữa)' : c.label, style: TextStyle(fontSize: 14, color: c.inactive ? Colors.grey : Colors.blue, decoration: c.inactive ? TextDecoration.lineThrough : null))),
+                    Tooltip(message: 'Không dùng nữa', child: InkWell(onTap: () => toggleInactive(h, c), child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      SizedBox(width: 28, height: 28, child: Checkbox(value: c.inactive, activeColor: _red, onChanged: (_) => toggleInactive(h, c))),
+                      Text('Ko dùng', style: TextStyle(fontSize: 11, color: c.inactive ? _red : Colors.black54, fontWeight: FontWeight.bold)),
+                    ]))),
                     if (c.digits.isNotEmpty) ...[_act('📞 Gọi', c.inactive ? Colors.grey : Colors.green, () => call(c.phone)), _act('💬 Nhắn tin', c.inactive ? Colors.grey : Colors.blue, () => zalo(c.phone))],
                   ])))),
                   if ('${h['note'] ?? ''}'.isNotEmpty) Text('${h['note']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
@@ -81,11 +94,7 @@ class _PhonePageState extends State<PhonePage> {
                 PopupMenuButton<String>(onSelected: (v) async {
                   if (v == 'share') await Share.share(shareText(h), subject: '${h['name']}');
                   if (v == 'edit') edit(h);
-                  if (v == 'del' && context.mounted) {
-                    final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(title: Text('Xoá số của "${h['name']}"?'), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('HUỶ')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('XOÁ'))]));
-                    if (ok == true) { await DB.deletePhone(h['id'] as int); load(); }
-                  }
-                }, itemBuilder: (_) => const [PopupMenuItem(value: 'share', child: Text('📤 Chia sẻ (Zalo...)')), PopupMenuItem(value: 'edit', child: Text('Sửa / thêm SĐT')), PopupMenuItem(value: 'del', child: Text('Xoá'))]),
+                }, itemBuilder: (_) => const [PopupMenuItem(value: 'share', child: Text('📤 Chia sẻ (Zalo...)')), PopupMenuItem(value: 'edit', child: Text('➕ Thêm SĐT / đánh dấu'))]),
               ])),
             ));
           }(),
@@ -102,12 +111,12 @@ class PhoneDialog extends StatefulWidget {
   State<PhoneDialog> createState() => _PhoneDialogState();
 }
 
-class _Row { String title; bool inactive; final TextEditingController name, phone; _Row(Contact c) : title = titles.contains(c.title) ? c.title : 'Anh', inactive = c.inactive, name = TextEditingController(text: c.name), phone = TextEditingController(text: c.phone); }
+class _Row { String title; bool inactive; final bool saved; final Contact? orig; final TextEditingController name, phone; _Row(Contact c, {this.saved = false}) : orig = saved ? c : null, title = titles.contains(c.title) ? c.title : 'Anh', inactive = c.inactive, name = TextEditingController(text: c.name), phone = TextEditingController(text: c.phone); }
 
 class _PhoneDialogState extends State<PhoneDialog> {
   late final name = TextEditingController(text: '${widget.item?['name'] ?? ''}');
   late final note = TextEditingController(text: '${widget.item?['note'] ?? ''}');
-  late final List<_Row> cs = [for (final c in contactsOf(widget.item ?? {})) _Row(c)];
+  late final List<_Row> cs = [for (final c in contactsOf(widget.item ?? {})) _Row(c, saved: true)];
   List<String> names = [];
   @override
   void initState() {
@@ -124,10 +133,11 @@ class _PhoneDialogState extends State<PhoneDialog> {
             initialValue: name.value,
             optionsBuilder: (v) => names.where((p) => v.text.isEmpty || p.toLowerCase().contains(v.text.toLowerCase())),
             onSelected: (v) => name.text = v,
-            fieldViewBuilder: (c, ctl, fn, _) { ctl.addListener(() => name.text = ctl.text); return TextField(controller: ctl, focusNode: fn, decoration: const InputDecoration(labelText: 'Tên hub')); },
+            fieldViewBuilder: (c, ctl, fn, _) { ctl.addListener(() => name.text = ctl.text); return TextField(controller: ctl, focusNode: fn, readOnly: widget.item != null, decoration: const InputDecoration(labelText: 'Tên hub')); },
           ),
           const SizedBox(height: 8),
-          for (var i = 0; i < cs.length; i++) Card(color: Colors.grey.shade50, margin: const EdgeInsets.symmetric(vertical: 4), child: Padding(padding: const EdgeInsets.fromLTRB(8, 0, 0, 8), child: Column(children: [
+          for (var i = 0; i < cs.length; i++) if (cs[i].saved) Card(color: Colors.grey.shade100, margin: const EdgeInsets.symmetric(vertical: 4), child: CheckboxListTile(dense: true, controlAffinity: ListTileControlAffinity.trailing, value: cs[i].inactive, onChanged: (v) => setState(() => cs[i].inactive = v!),
+            title: Text(cs[i].orig!.label, style: TextStyle(decoration: cs[i].inactive ? TextDecoration.lineThrough : null, color: cs[i].inactive ? Colors.grey : null)), subtitle: const Text('Không dùng nữa (số đã lưu không sửa/xoá được)', style: TextStyle(fontSize: 11)))) else Card(color: Colors.grey.shade50, margin: const EdgeInsets.symmetric(vertical: 4), child: Padding(padding: const EdgeInsets.fromLTRB(8, 0, 0, 8), child: Column(children: [
             Row(children: [
               DropdownButton<String>(value: cs[i].title, underline: const SizedBox(), items: [for (final t in titles) DropdownMenuItem(value: t, child: Text(t))], onChanged: (v) => setState(() => cs[i].title = v!)),
               const SizedBox(width: 8),
@@ -135,7 +145,6 @@ class _PhoneDialogState extends State<PhoneDialog> {
               IconButton(tooltip: 'Xoá liên hệ', icon: const Icon(Icons.remove_circle_outline, color: _red), onPressed: () => setState(() { cs.removeAt(i); if (cs.isEmpty) cs.add(_Row(Contact())); })),
             ]),
             Padding(padding: const EdgeInsets.only(right: 8), child: TextField(controller: cs[i].phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Số điện thoại', isDense: true, prefixIcon: Icon(Icons.phone, size: 18)))),
-            CheckboxListTile(dense: true, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, value: cs[i].inactive, onChanged: (v) => setState(() => cs[i].inactive = v!), title: const Text('Không dùng nữa', style: TextStyle(fontSize: 13))),
           ]))),
           TextButton.icon(onPressed: () => setState(() => cs.add(_Row(Contact()))), icon: const Icon(Icons.person_add), label: const Text('Thêm số điện thoại')),
           TextField(controller: note, decoration: const InputDecoration(labelText: 'Ghi chú (ca trực, cổng...)')),
@@ -144,7 +153,7 @@ class _PhoneDialogState extends State<PhoneDialog> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('HUỶ')),
           FilledButton(onPressed: () async {
             if (name.text.trim().isEmpty) return;
-            final list = [for (final r in cs) Contact(title: r.title, name: r.name.text.trim(), phone: r.phone.text.trim(), inactive: r.inactive)].where((c) => c.phone.isNotEmpty || c.name.isNotEmpty).toList();
+            final list = [for (final r in cs) r.saved ? (r.orig!.copy()..inactive = r.inactive) : Contact(title: r.title, name: r.name.text.trim(), phone: r.phone.text.trim())].where((c) => c.phone.isNotEmpty || c.name.isNotEmpty).toList();
             await DB.savePhone({'id': widget.item?['id'], 'name': name.text.trim(), 'contacts': list, 'note': note.text.trim()});
             if (context.mounted) Navigator.pop(context, true);
           }, child: const Text('LƯU')),

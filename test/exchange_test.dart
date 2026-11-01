@@ -20,7 +20,7 @@ void main() {
     expect(old.single.phone, '0901 234 567');
     final m = mergeContacts(old, [Contact(title: 'Chị', name: 'Lan', phone: '+84901234567'), Contact(name: 'Tuấn', phone: '0912000000')]);
     expect(m.length, 2);
-    expect(m.first.label, 'Chị Lan – 0901 234 567');
+    expect(m.first.label, '0901 234 567'); // số đã có không bị sửa tên
     final oldCsv = parsePhoneFile('name,phone,note\nHub A,0901,\n');
     expect(oldCsv['hub a']!.$2.single.phone, '0901');
     final newCsv = parsePhoneFile('name,title,contact_name,phone,note\nHub A,Anh,Tuấn,0901,\nHub A,Chị,Lan,0902,\n');

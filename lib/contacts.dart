@@ -44,14 +44,14 @@ List<Contact> contactsOf(Map row) {
 String encodeContacts(List<Contact> cs) => jsonEncode(cs.map((c) => c.toJson()).toList());
 
 /// Gộp liên hệ từ file vào danh sách đang có: khớp theo số điện thoại;
-/// số mới → thêm; cùng số nhưng tên/danh xưng khác (file có tên) → cập nhật.
+/// số mới → thêm; số đã có giữ nguyên, chỉ nhận cờ "không dùng nữa".
 List<Contact> mergeContacts(List<Contact> mine, List<Contact> inc) {
   final out = [for (final c in mine) c.copy()];
   for (final c in inc) {
     if (c.digits.isEmpty) continue;
     final ex = out.where((o) => o.digits == c.digits).firstOrNull;
     if (ex == null) { out.add(c); continue; }
-    if (c.name.isNotEmpty && (c.name != ex.name || c.title != ex.title)) { ex.name = c.name; ex.title = c.title; }
+    // Số đã có: không đổi tên/danh xưng/số (chỉ được thêm, không sửa).
     // File đánh dấu "không dùng nữa" → đánh dấu theo (không bao giờ xoá số).
     if (c.inactive) ex.inactive = true;
   }

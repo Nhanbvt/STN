@@ -121,17 +121,15 @@ class _HubPageState extends State<HubPage> {
                 final m = ScaffoldMessenger.of(context);
                 m.showSnackBar(const SnackBar(content: Text('Đang lấy vị trí GPS...')));
                 try {
+                  if (await DB.locEditsLeft(h['name']) <= 0) { m.showSnackBar(const SnackBar(content: Text(kLocLimitMsg))); return; }
                   final p = await currentPosition();
+                  if (!await DB.useLocEdit(h['name'])) { m.showSnackBar(const SnackBar(content: Text(kLocLimitMsg))); return; }
                   await DB.saveHub({...h, 'lat': p.latitude, 'lng': p.longitude});
                   m.showSnackBar(SnackBar(content: Text('Đã ghim vị trí thực tế (±${p.accuracy.toStringAsFixed(0)} m)')));
                   load();
                 } catch (e) { m.showSnackBar(SnackBar(content: Text('$e'))); }
               }
-              if (v == 'del') {
-                final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(title: Text('Xoá hub "${h['name']}"?'), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('HUỶ')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('XOÁ'))]));
-                if (ok == true) { await DB.deleteHub(h['id'] as int); load(); }
-              }
-            }, itemBuilder: (_) => const [PopupMenuItem(value: 'share', child: Text('📤 Chia sẻ (Zalo...)')), PopupMenuItem(value: 'pin', child: Text('📍 Ghim vị trí hiện tại')), PopupMenuItem(value: 'edit', child: Text('Sửa')), PopupMenuItem(value: 'del', child: Text('Xoá'))]),
+            }, itemBuilder: (_) => const [PopupMenuItem(value: 'share', child: Text('📤 Chia sẻ (Zalo...)')), PopupMenuItem(value: 'pin', child: Text('📍 Ghim vị trí hiện tại')), PopupMenuItem(value: 'edit', child: Text('Sửa'))]),
           )),
         ])),
       ]),
@@ -198,6 +196,13 @@ class _HubDialogState extends State<HubDialog> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('HUỶ')),
           FilledButton(onPressed: () async {
             if (name.text.trim().isEmpty) return;
+            final oLat = (widget.hub?['lat'] as num?)?.toDouble(), oLng = (widget.hub?['lng'] as num?)?.toDouble();
+            if (lat != oLat || lng != oLng) {
+              if (!await DB.useLocEdit(widget.hub?['name'] ?? name.text.trim())) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(kLocLimitMsg)));
+                return;
+              }
+            }
             await DB.saveHub({'id': widget.hub?['id'], 'name': name.text.trim(), 'lat': lat, 'lng': lng, 'note': note.text.trim()});
             if (context.mounted) Navigator.pop(context, true);
           }, child: const Text('LƯU')),

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:so_thu_nhap/contacts.dart';
 import 'package:so_thu_nhap/phones.dart';
+import 'package:so_thu_nhap/db.dart';
 
 void main() {
   test('old JSON without flag stays active', () {
@@ -21,5 +22,16 @@ void main() {
   test('JSON active=false roundtrip', () {
     final c = Contact.from(Contact(phone: '1', inactive: true).toJson());
     expect(c.inactive, true);
+  });
+  test('merge never renames existing contact', () {
+    final out = mergeContacts([Contact(name: 'A', phone: '0901')], [Contact(name: 'B', phone: '0901'), Contact(name: 'C', phone: '0902')]);
+    expect(out.map((c) => c.name).toList(), ['A', 'C']);
+  });
+  test('location edits max 2 per month', () {
+    final now = DateTime(2026, 11, 5);
+    var (ok, s) = locEditStep('', now); expect(ok, true);
+    (ok, s) = locEditStep(s, now); expect(ok, true);
+    (ok, s) = locEditStep(s, now); expect(ok, false);
+    expect(locEditStep(s, DateTime(2026, 12, 1)).$1, true);
   });
 }
