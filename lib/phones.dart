@@ -63,7 +63,7 @@ class _PhonePageState extends State<PhonePage> {
         Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => q = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Tìm hub / tên / số ĐT...', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(30))))),
         Expanded(child: shown.isEmpty ? const Center(child: Text('Chưa có số ĐT. Bấm + để thêm.')) : ListView(padding: const EdgeInsets.only(bottom: 90), children: [
           for (final h in shown) () {
-            final cs = contactsOf(h);
+            final cs = sortActiveFirst(contactsOf(h));
             return Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), child: InkWell(
               onTap: () => edit(h),
               child: Padding(padding: const EdgeInsets.fromLTRB(14, 8, 0, 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -71,11 +71,11 @@ class _PhonePageState extends State<PhonePage> {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('${h['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   if (cs.isEmpty) const Text('Chưa có SĐT', style: TextStyle(color: Colors.grey)),
-                  for (final c in cs) InkWell(onTap: () => call(c.phone), child: Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
-                    const Icon(Icons.call, size: 16, color: Colors.green), const SizedBox(width: 6),
-                    Expanded(child: Text(c.label, style: const TextStyle(fontSize: 14, color: Colors.blue))),
-                    if (c.digits.isNotEmpty) ...[_act('📞 Gọi', Colors.green, () => call(c.phone)), _act('💬 Nhắn tin', Colors.blue, () => zalo(c.phone))],
-                  ]))),
+                  for (final c in cs) Opacity(opacity: c.inactive ? 0.45 : 1, child: InkWell(onTap: () => call(c.phone), child: Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
+                    Icon(c.inactive ? Icons.phone_disabled : Icons.call, size: 16, color: c.inactive ? Colors.grey : Colors.green), const SizedBox(width: 6),
+                    Expanded(child: Text(c.inactive ? '${c.label} (không dùng nữa)' : c.label, style: TextStyle(fontSize: 14, color: c.inactive ? Colors.grey : Colors.blue, decoration: c.inactive ? TextDecoration.lineThrough : null))),
+                    if (c.digits.isNotEmpty) ...[_act('📞 Gọi', c.inactive ? Colors.grey : Colors.green, () => call(c.phone)), _act('💬 Nhắn tin', c.inactive ? Colors.grey : Colors.blue, () => zalo(c.phone))],
+                  ])))),
                   if ('${h['note'] ?? ''}'.isNotEmpty) Text('${h['note']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ])),
                 PopupMenuButton<String>(onSelected: (v) async {
@@ -102,7 +102,7 @@ class PhoneDialog extends StatefulWidget {
   State<PhoneDialog> createState() => _PhoneDialogState();
 }
 
-class _Row { String title; final TextEditingController name, phone; _Row(Contact c) : title = titles.contains(c.title) ? c.title : 'Anh', name = TextEditingController(text: c.name), phone = TextEditingController(text: c.phone); }
+class _Row { String title; bool inactive; final TextEditingController name, phone; _Row(Contact c) : title = titles.contains(c.title) ? c.title : 'Anh', inactive = c.inactive, name = TextEditingController(text: c.name), phone = TextEditingController(text: c.phone); }
 
 class _PhoneDialogState extends State<PhoneDialog> {
   late final name = TextEditingController(text: '${widget.item?['name'] ?? ''}');
@@ -135,6 +135,7 @@ class _PhoneDialogState extends State<PhoneDialog> {
               IconButton(tooltip: 'Xoá liên hệ', icon: const Icon(Icons.remove_circle_outline, color: _red), onPressed: () => setState(() { cs.removeAt(i); if (cs.isEmpty) cs.add(_Row(Contact())); })),
             ]),
             Padding(padding: const EdgeInsets.only(right: 8), child: TextField(controller: cs[i].phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Số điện thoại', isDense: true, prefixIcon: Icon(Icons.phone, size: 18)))),
+            CheckboxListTile(dense: true, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, value: cs[i].inactive, onChanged: (v) => setState(() => cs[i].inactive = v!), title: const Text('Không dùng nữa', style: TextStyle(fontSize: 13))),
           ]))),
           TextButton.icon(onPressed: () => setState(() => cs.add(_Row(Contact()))), icon: const Icon(Icons.person_add), label: const Text('Thêm số điện thoại')),
           TextField(controller: note, decoration: const InputDecoration(labelText: 'Ghi chú (ca trực, cổng...)')),
@@ -143,7 +144,7 @@ class _PhoneDialogState extends State<PhoneDialog> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('HUỶ')),
           FilledButton(onPressed: () async {
             if (name.text.trim().isEmpty) return;
-            final list = [for (final r in cs) Contact(title: r.title, name: r.name.text.trim(), phone: r.phone.text.trim())].where((c) => c.phone.isNotEmpty || c.name.isNotEmpty).toList();
+            final list = [for (final r in cs) Contact(title: r.title, name: r.name.text.trim(), phone: r.phone.text.trim(), inactive: r.inactive)].where((c) => c.phone.isNotEmpty || c.name.isNotEmpty).toList();
             await DB.savePhone({'id': widget.item?['id'], 'name': name.text.trim(), 'contacts': list, 'note': note.text.trim()});
             if (context.mounted) Navigator.pop(context, true);
           }, child: const Text('LƯU')),
@@ -162,10 +163,10 @@ Future<void> exportPhones(BuildContext context, List<Map<String, Object?>> rows)
   final dir = await getTemporaryDirectory();
   final f = File('${dir.path}/so_thu_nhap_phones_${DateTime.now().toIso8601String().substring(0, 10)}.${csv ? 'csv' : 'json'}');
   if (csv) {
-    final b = StringBuffer('\uFEFFname,title,contact_name,phone,note\n');
+    final b = StringBuffer('\uFEFFname,title,contact_name,phone,status,note\n');
     for (final r in rows) {
       final cs = contactsOf(r);
-      for (final c in cs.isEmpty ? [Contact(title: '')] : cs) { b.writeln([r['name'], c.title, c.name, c.phone, r['note']].map(_cell).join(',')); }
+      for (final c in cs.isEmpty ? [Contact(title: '')] : cs) { b.writeln([r['name'], c.title, c.name, c.phone, c.phone.isEmpty ? '' : (c.inactive ? 'inactive' : 'active'), r['note']].map(_cell).join(',')); }
     }
     await f.writeAsString(b.toString());
   } else {
@@ -186,7 +187,7 @@ Map<String, (String, List<Contact>, String)> parsePhoneFile(String text) {
   } else {
     final rows = parseCsv(t);
     if (rows.isEmpty) return {};
-    const alias = {'tên': 'name', 'ten': 'name', 'tên hub': 'name', 'sđt': 'phone', 'sdt': 'phone', 'số điện thoại': 'phone', 'ghi chú': 'note', 'danh xưng': 'title', 'tên liên hệ': 'contact_name'};
+    const alias = {'tên': 'name', 'ten': 'name', 'tên hub': 'name', 'sđt': 'phone', 'sdt': 'phone', 'số điện thoại': 'phone', 'ghi chú': 'note', 'danh xưng': 'title', 'tên liên hệ': 'contact_name', 'trạng thái': 'status', 'trang thai': 'status'};
     final head = rows.first.map((e) => e.trim().toLowerCase()).map((h) => alias[h] ?? h).toList();
     final hasHead = head.contains('name');
     final cols = hasHead ? head : ['name', 'phone', 'note'];
@@ -224,13 +225,13 @@ Future<bool> importPhones(BuildContext context) async {
   if (add.isEmpty && chg.isEmpty) { m.showSnackBar(SnackBar(content: Text('Đã đối chiếu ${inc.length} hub: không có gì mới'))); return false; }
   if (!context.mounted) return false;
   final pick = {for (var i = 0; i < chg.length; i++) i};
-  String fmt(List<Contact> cs) => cs.isEmpty ? '(trống)' : cs.map((c) => c.label).join('\n');
+  String fmt(List<Contact> cs) => cs.isEmpty ? '(trống)' : cs.map((c) => c.inactive ? '${c.label} ⛔ không dùng nữa' : c.label).join('\n');
   final ok = await showDialog<bool>(context: context, builder: (c) => StatefulBuilder(builder: (c, ss) => AlertDialog(
     title: const Text('Đối chiếu Số ĐT Hub'),
     content: SizedBox(width: 420, child: ListView(shrinkWrap: true, children: [
       Text('File có ${inc.length} hub.\n➕ Hub mới: ${add.length}\n✏️ Có SĐT mới / khác: ${chg.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
       if (add.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Mới: ${add.take(15).map((e) => e.$1).join(', ')}${add.length > 15 ? '…' : ''}', style: const TextStyle(fontSize: 12))),
-      if (chg.isNotEmpty) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Chọn hub muốn cập nhật theo file (SĐT cũ vẫn giữ):')),
+      if (chg.isNotEmpty) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Chọn hub muốn cập nhật theo file (SĐT cũ vẫn giữ, số "không dùng nữa" chỉ bị đánh dấu, không xoá):')),
       for (var i = 0; i < chg.length; i++) CheckboxListTile(dense: true, value: pick.contains(i), onChanged: (v) => ss(() => v! ? pick.add(i) : pick.remove(i)),
         title: Text('${chg[i].$1['name']}'), subtitle: Text('Đang có:\n${fmt(chg[i].$2)}\nSau khi cập nhật:\n${fmt(chg[i].$3)}')),
     ])),

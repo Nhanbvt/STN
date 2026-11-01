@@ -3,13 +3,27 @@ import 'dart:convert';
 /// Một người liên hệ của hub: danh xưng (Anh/Chị), tên, số điện thoại.
 class Contact {
   String title, name, phone;
-  Contact({this.title = 'Anh', this.name = '', this.phone = ''});
-  Map<String, String> toJson() => {'title': title, 'name': name, 'phone': phone};
-  static Contact from(Map m) => Contact(title: '${m['title'] ?? 'Anh'}'.trim().isEmpty ? 'Anh' : '${m['title'] ?? 'Anh'}'.trim(), name: '${m['name'] ?? ''}'.trim(), phone: '${m['phone'] ?? ''}'.trim());
+  /// "Không dùng nữa". Mặc định false (đang dùng) → file/dữ liệu cũ không đổi.
+  bool inactive;
+  Contact({this.title = 'Anh', this.name = '', this.phone = '', this.inactive = false});
+  Map<String, Object> toJson() => {'title': title, 'name': name, 'phone': phone, 'active': !inactive};
+  static Contact from(Map m) => Contact(title: '${m['title'] ?? 'Anh'}'.trim().isEmpty ? 'Anh' : '${m['title'] ?? 'Anh'}'.trim(), name: '${m['name'] ?? ''}'.trim(), phone: '${m['phone'] ?? ''}'.trim(), inactive: isInactiveValue(m['active'] ?? m['status'] ?? m['trang_thai'] ?? m['trạng thái']));
+  Contact copy() => Contact(title: title, name: name, phone: phone, inactive: inactive);
   String get label => [if (name.isNotEmpty) '$title $name', if (phone.isNotEmpty) phone].join(' – ');
   String get digits => normPhone(phone);
-  bool sameAs(Contact o) => title == o.title && name == o.name && phone == o.phone;
+  bool sameAs(Contact o) => title == o.title && name == o.name && phone == o.phone && inactive == o.inactive;
 }
+
+/// Đọc cờ trạng thái từ JSON/CSV: false, 0, inactive, không dùng... → không dùng nữa. Trống → đang dùng.
+bool isInactiveValue(Object? v) {
+  if (v == null) return false;
+  if (v is bool) return !v;
+  final s = '$v'.trim().toLowerCase();
+  return const {'false', '0', 'inactive', 'no', 'off', 'không dùng', 'khong dung', 'không dùng nữa', 'khong dung nua', 'ngưng', 'ngung'}.contains(s);
+}
+
+/// Đang dùng trước, không dùng nữa xuống cuối (giữ thứ tự gốc).
+List<Contact> sortActiveFirst(List<Contact> cs) => [...cs.where((c) => !c.inactive), ...cs.where((c) => c.inactive)];
 
 String normPhone(String p) {
   var d = p.replaceAll(RegExp(r'[^\d]'), '');
@@ -32,12 +46,14 @@ String encodeContacts(List<Contact> cs) => jsonEncode(cs.map((c) => c.toJson()).
 /// Gộp liên hệ từ file vào danh sách đang có: khớp theo số điện thoại;
 /// số mới → thêm; cùng số nhưng tên/danh xưng khác (file có tên) → cập nhật.
 List<Contact> mergeContacts(List<Contact> mine, List<Contact> inc) {
-  final out = [for (final c in mine) Contact(title: c.title, name: c.name, phone: c.phone)];
+  final out = [for (final c in mine) c.copy()];
   for (final c in inc) {
     if (c.digits.isEmpty) continue;
     final ex = out.where((o) => o.digits == c.digits).firstOrNull;
     if (ex == null) { out.add(c); continue; }
     if (c.name.isNotEmpty && (c.name != ex.name || c.title != ex.title)) { ex.name = c.name; ex.title = c.title; }
+    // File đánh dấu "không dùng nữa" → đánh dấu theo (không bao giờ xoá số).
+    if (c.inactive) ex.inactive = true;
   }
   return out;
 }
@@ -55,5 +71,6 @@ bool sameContacts(List<Contact> a, List<Contact> b) => a.length == b.length && [
   final ph = '${m['phone'] ?? ''}'.trim();
   final cn = '${m['contact_name'] ?? m['ten_lien_he'] ?? ''}'.trim();
   final t = '${m['title'] ?? m['danh_xung'] ?? ''}'.trim();
-  return (name, ph.isEmpty ? [] : [Contact(title: t.isEmpty ? 'Anh' : t, name: cn, phone: ph)], note);
+  final off = isInactiveValue(m['status'] ?? m['active'] ?? m['trang_thai']);
+  return (name, ph.isEmpty ? [] : [Contact(title: t.isEmpty ? 'Anh' : t, name: cn, phone: ph, inactive: off)], note);
 }
