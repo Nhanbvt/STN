@@ -105,7 +105,7 @@ class _HomeState extends State<Home> {
               GestureDetector(onTap: chooseVehicle, child: Text('🚐 $vehicle ▾', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
               const SizedBox(height: 10),
               Wrap(spacing: 18, runSpacing: 6, children: [
-                stat('Số chuyến', '${p.trips}', eye: true),
+                stat('Số chuyến', hideMoney.value ? '****' : '${p.trips}'),
                 stat('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
                 stat('Tiền chuyến', vndH(p.tripMoney)),
                 stat('Tiền công', vndH(p.luong)),
@@ -113,7 +113,7 @@ class _HomeState extends State<Home> {
               ]),
               const SizedBox(height: 8),
               Center(child: Column(children: [
-                const Text('TỔNG CỘNG', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white70, letterSpacing: 1)),
+                Row(mainAxisSize: MainAxisSize.min, children: [const Text('TỔNG CỘNG', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white70, letterSpacing: 1)), const SizedBox(width: 6), eyeBtn(color: Colors.white, size: 20)]),
                 Text(vndH(p.tong), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.yellowAccent)),
               ])),
             ]),
@@ -421,7 +421,7 @@ class _StatsPageState extends State<StatsPage> {
         Card(child: Column(children: [
           ListTile(title: Text('Tháng ${widget.month.month}/${widget.month.year}', style: const TextStyle(fontWeight: FontWeight.bold, color: kRed))),
           row('Số ngày chạy', '${p.days}'),
-          row('Tổng chuyến', '${p.trips}'),
+          row('Số chuyến', hideMoney.value ? '****' : '${p.trips}'),
           row('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
           row('Tiền chuyến', vndH(p.tripMoney), Colors.blue),
           row('Tiền công (${fmtNum(p.congThuong)} công)', vndH(p.luong)),

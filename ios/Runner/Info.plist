@@ -5,7 +5,19 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Dùng vị trí hiện tại để lưu định vị chính xác của Hub.</string>
 	<key>LSApplicationQueriesSchemes</key>
-	<array><string>comgooglemaps</string></array>
+	<array>
+		<string>comgooglemaps</string>
+		<string>tel</string>
+		<string>zalo</string>
+		<string>https</string>
+		<string>http</string>
+	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Chọn tệp/ảnh để nhập dữ liệu vào app.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

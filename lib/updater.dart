@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -20,7 +21,8 @@ int compareVersions(String a, String b) {
 
 Future<void> checkForUpdate(BuildContext context, {bool silent = true}) async {
   if (!Platform.isAndroid) {
-    if (!silent && context.mounted) _snack(context, 'Tự cập nhật chỉ hỗ trợ Android');
+    // iOS: không cài APK được → mở trang phát hành trên GitHub.
+    if (!silent) await launchUrl(Uri.parse('https://github.com/Nhanbvt/STN/releases/latest'), mode: LaunchMode.externalApplication);
     return;
   }
   final c = HttpClient()..connectionTimeout = const Duration(seconds: 10);

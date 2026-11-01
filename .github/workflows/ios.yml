@@ -7,10 +7,14 @@ on:
 jobs:
   ios:
     runs-on: macos-latest
+    needs: android
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.27.1'
           channel: stable
           cache: true
       - run: flutter pub get
@@ -24,6 +28,13 @@ jobs:
         with:
           name: SoThuNhap-ipa
           path: SoThuNhap.ipa
+      - run: cp SoThuNhap.ipa SoThuNhap-1.0.${{ github.run_number }}-unsigned.ipa
+      - name: Attach IPA to GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          files: SoThuNhap-1.0.${{ github.run_number }}-unsigned.ipa
 
   android:
     runs-on: ubuntu-latest
