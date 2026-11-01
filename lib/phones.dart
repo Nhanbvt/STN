@@ -40,11 +40,12 @@ class _PhonePageState extends State<PhonePage> {
         Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => q = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Tìm hub / số ĐT...', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(30))))),
         Expanded(child: shown.isEmpty ? const Center(child: Text('Chưa có số ĐT. Bấm + để thêm.')) : ListView(padding: const EdgeInsets.only(bottom: 90), children: [
           for (final h in shown) Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), child: ListTile(
-            leading: const Icon(Icons.phone, color: _red),
+            leading: Icon('${h['phone'] ?? ''}'.trim().isEmpty ? Icons.phone_disabled : Icons.phone, color: '${h['phone'] ?? ''}'.trim().isEmpty ? Colors.grey : _red),
             title: Text('${h['name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('${h['phone']}${'${h['note'] ?? ''}'.isEmpty ? '' : '\n${h['note']}'}'),
-            onTap: () => launchUrl(Uri(scheme: 'tel', path: '${h['phone']}'.replaceAll(RegExp(r'[^\d+]'), ''))),
+            subtitle: Text('${'${h['phone'] ?? ''}'.isEmpty ? 'Chưa có SĐT' : h['phone']}${'${h['note'] ?? ''}'.isEmpty ? '' : '\n${h['note']}'}'),
+            onTap: () => '${h['phone'] ?? ''}'.trim().isEmpty ? edit(h) : launchUrl(Uri(scheme: 'tel', path: '${h['phone']}'.replaceAll(RegExp(r'[^\d+]'), ''))),
             trailing: PopupMenuButton<String>(onSelected: (v) async {
+              if (v == 'call' && '${h['phone'] ?? ''}'.trim().isEmpty) { edit(h); return; }
               if (v == 'call') await launchUrl(Uri(scheme: 'tel', path: '${h['phone']}'.replaceAll(RegExp(r'[^\d+]'), '')));
               if (v == 'share') await Share.share('📞 ${h['name']}: ${h['phone']}', subject: '${h['name']}');
               if (v == 'edit') edit(h);
@@ -95,7 +96,7 @@ class _PhoneDialogState extends State<PhoneDialog> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('HUỶ')),
           FilledButton(onPressed: () async {
-            if (name.text.trim().isEmpty || phone.text.trim().isEmpty) return;
+            if (name.text.trim().isEmpty) return;
             await DB.savePhone({'id': widget.item?['id'], 'name': name.text.trim(), 'phone': phone.text.trim(), 'note': note.text.trim()});
             if (context.mounted) Navigator.pop(context, true);
           }, child: const Text('LƯU')),

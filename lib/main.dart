@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'hubs.dart';
 import 'phones.dart';
+import 'about.dart';
+import 'phone_seed.dart';
 import 'updater.dart';
 import 'db.dart';
 
@@ -21,6 +23,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DB.init();
   try { await DB.seedHubs(); } catch (_) {}
+  try { await DB.syncPhones(phoneSeed); } catch (_) {}
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Sổ Thu Nhập',
@@ -79,6 +82,7 @@ class _HomeState extends State<Home> {
                   PopupMenuItem(value: 'export', child: Text('📤 Xuất dữ liệu')),
                   PopupMenuItem(value: 'import', child: Text('📥 Nhập dữ liệu')),
                   PopupMenuItem(value: 'update', child: Text('🔄 Kiểm tra cập nhật')),
+                  PopupMenuItem(value: 'about', child: Text('ℹ️ Thông tin App')),
                 ]),
               ]),
               Row(children: [
@@ -175,6 +179,7 @@ class _HomeState extends State<Home> {
       case 'stats': await Navigator.push(context, MaterialPageRoute(builder: (_) => StatsPage(trips: monthTrips, month: month)));
       case 'fuel': await showDialog(context: context, builder: (_) => const FuelDialog());
       case 'cal': await Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarPage(trips: all, month: month)));
+      case 'about': await showAppInfo(context);
       case 'update': await checkForUpdate(context, silent: false);
       case 'phone': await Navigator.push(context, MaterialPageRoute(builder: (_) => const PhonePage()));
       case 'hub': await Navigator.push(context, MaterialPageRoute(builder: (_) => const HubPage()));

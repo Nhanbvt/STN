@@ -147,12 +147,33 @@ class DB {
     return added;
   }
 
+  /// Mỗi lần mở app: hub nào trong Vị trí Hub (mẫu hoặc tự thêm) chưa có trong Số ĐT Hub thì thêm (SĐT trống).
+  /// Không ghi đè SĐT đã có; tên người dùng đã xoá khỏi Số ĐT Hub sẽ không thêm lại.
+  static Future<int> syncPhones([Map<String, String> known = const {}]) async {
+    final have = (await db.query('phones', columns: ['name'])).map((e) => key(e['name'])).toSet();
+    final deleted = (await get('phone_deleted')).split('\n').where((e) => e.isNotEmpty).toSet();
+    var added = 0;
+    final b = db.batch();
+    for (final h in await db.query('hubs', columns: ['name'])) {
+      final n = '${h['name'] ?? ''}'.trim(), k = key(n);
+      if (k.isEmpty || deleted.contains(k) || !have.add(k)) continue;
+      b.insert('phones', {'name': n, 'phone': known[n] ?? '', 'note': ''});
+      added++;
+    }
+    await b.commit(noResult: true);
+    return added;
+  }
+
   static Future<List<Map<String, Object?>>> phones() => db.query('phones', orderBy: 'name COLLATE NOCASE');
   static Future<void> savePhone(Map<String, Object?> h) async {
     h['id'] == null ? await db.insert('phones', Map.of(h)..remove('id')) : await db.update('phones', h, where: 'id=?', whereArgs: [h['id']]);
     await db.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h['name']]);
   }
-  static Future<void> deletePhone(int id) => db.delete('phones', where: 'id=?', whereArgs: [id]);
+  static Future<void> deletePhone(int id) async {
+    final r = await db.query('phones', where: 'id=?', whereArgs: [id]);
+    await db.delete('phones', where: 'id=?', whereArgs: [id]);
+    if (r.isNotEmpty) await set('phone_deleted', ({...(await get('phone_deleted')).split('\n').where((e) => e.isNotEmpty), key(r.first['name'])}).join('\n'));
+  }
 
   /// So khớp danh sách nhập theo tên: trả về (mới, thay đổi[(cũ, mới)]).
   static (List<Map<String, Object?>>, List<(Map<String, Object?>, Map<String, Object?>)>) diff(List<Map<String, Object?>> mine, List<Map<String, Object?>> inc, List<String> fields) {
