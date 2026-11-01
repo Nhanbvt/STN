@@ -142,7 +142,7 @@ class _HomeState extends State<Home> {
                   Text('${t.fromText} → ${t.toText}', softWrap: true, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                 ])),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Padding(padding: const EdgeInsets.only(left: 4, right: 2), child: Text(vnd(t.price), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13))),
+                  Padding(padding: const EdgeInsets.only(left: 4, right: 2), child: Text(hideMoney.value ? '****' : vnd(t.price), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13))),
                   IconButton(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36, minHeight: 32), iconSize: 20, icon: const Icon(Icons.delete_outline), onPressed: () => deleteTrip(t)),
                 ]),
               ])),
