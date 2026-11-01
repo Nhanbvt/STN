@@ -11,6 +11,7 @@ import 'about.dart';
 import 'phone_seed.dart';
 import 'updater.dart';
 import 'db.dart';
+import 'place_search.dart';
 
 const kRed = Color(0xFFD32F2F);
 const kOrange = Color(0xFFFF7043);
@@ -236,7 +237,10 @@ class _TripDialogState extends State<TripDialog> {
   late String route, vehicle;
   int? bandId;
   List<Band> bands = [];
-  List<String> places = [];
+  PlaceIndex places = placeCache;
+  final _fn = <TextEditingController, FocusNode>{};
+  @override
+  void dispose() { for (final f in _fn.values) { f.dispose(); } super.dispose(); }
   int gd = 30000, gn = 30000;
 
   @override
@@ -250,7 +254,7 @@ class _TripDialogState extends State<TripDialog> {
     route = t?.route ?? routeTypes[0];
     vehicle = t?.vehicle ?? widget.vehicle;
     bandId = t?.bandId;
-    () async { bands = await DB.bands(); places = await DB.places(); final g = await DB.ghep(); gd = g.$1; gn = g.$2; if (mounted) setState(() {}); }();
+    () async { bands = await DB.bands(); places = placeCache = PlaceIndex([...await DB.places(), ...(await DB.hubs()).map((h) => '${h['name']}')]); final g = await DB.ghep(); gd = g.$1; gn = g.$2; if (mounted) setState(() {}); }();
   }
 
   List<Band> get options => bands.where((b) => b.vehicle == vehicle && b.route == route).toList();
@@ -265,8 +269,8 @@ class _TripDialogState extends State<TripDialog> {
         child: Row(children: [
           Expanded(child: RawAutocomplete<String>(
             textEditingController: c,
-            focusNode: FocusNode(),
-            optionsBuilder: (v) => v.text.isEmpty ? const [] : places.where((p) => p.toLowerCase().contains(v.text.toLowerCase())),
+            focusNode: _fn.putIfAbsent(c, FocusNode.new),
+            optionsBuilder: (v) => places.search(v.text),
             onSelected: (_) => setState(() {}),
             fieldViewBuilder: (ctx, ctl, fn, _) => TextField(controller: ctl, focusNode: fn, onChanged: (_) => setState(() {}), decoration: InputDecoration(labelText: label, isDense: true, border: const OutlineInputBorder())),
             optionsViewBuilder: (ctx, onSel, opts) => Align(alignment: Alignment.topLeft, child: Material(elevation: 4, child: SizedBox(width: 250, height: 200, child: ListView(children: [for (final o in opts) ListTile(dense: true, title: Text(o), onTap: () => onSel(o))])))),

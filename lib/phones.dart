@@ -80,15 +80,24 @@ class _PhonePageState extends State<PhonePage> {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('${h['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   if (cs.isEmpty) const Text('Chưa có SĐT', style: TextStyle(color: Colors.grey)),
-                  for (final c in cs) Opacity(opacity: c.inactive ? 0.45 : 1, child: InkWell(onTap: () => call(c.phone), child: Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
-                    Icon(c.inactive ? Icons.phone_disabled : Icons.call, size: 16, color: c.inactive ? Colors.grey : Colors.green), const SizedBox(width: 6),
-                    Expanded(child: Text(c.inactive ? '${c.label} (không dùng nữa)' : c.label, style: TextStyle(fontSize: 14, color: c.inactive ? Colors.grey : Colors.blue, decoration: c.inactive ? TextDecoration.lineThrough : null))),
-                    Tooltip(message: 'Không dùng nữa', child: InkWell(onTap: () => toggleInactive(h, c), child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      SizedBox(width: 28, height: 28, child: Checkbox(value: c.inactive, activeColor: _red, onChanged: (_) => toggleInactive(h, c))),
-                      Text('Ko dùng', style: TextStyle(fontSize: 11, color: c.inactive ? _red : Colors.black54, fontWeight: FontWeight.bold)),
-                    ]))),
-                    if (c.digits.isNotEmpty) ...[_act('📞 Gọi', c.inactive ? Colors.grey : Colors.green, () => call(c.phone)), _act('💬 Nhắn tin', c.inactive ? Colors.grey : Colors.blue, () => zalo(c.phone))],
-                  ])))),
+                  for (final c in cs) () {
+                    final g = c.inactive;
+                    final ts = TextStyle(fontSize: 14, color: g ? Colors.grey : Colors.black87, decoration: g ? TextDecoration.lineThrough : null);
+                    final who = c.name.isEmpty ? '${c.title} (chưa có tên)' : '${c.title} ${c.name}';
+                    return Opacity(opacity: g ? 0.55 : 1, child: Padding(padding: const EdgeInsets.only(top: 4, bottom: 4, right: 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, children: [
+                        Text(who, style: ts.copyWith(fontWeight: FontWeight.w600)),
+                        InkWell(onTap: () => toggleInactive(h, c), child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          SizedBox(width: 26, height: 26, child: Checkbox(value: g, activeColor: _red, visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, onChanged: (_) => toggleInactive(h, c))),
+                          Text(g ? 'Ko dùng nữa' : 'Ko dùng', style: TextStyle(fontSize: 11, color: g ? _red : Colors.black54, fontWeight: FontWeight.bold)),
+                        ])),
+                      ]),
+                      if (c.phone.isNotEmpty) Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 2, runSpacing: 2, children: [
+                        Text(c.phone, style: ts.copyWith(color: g ? Colors.grey : Colors.blue, fontWeight: FontWeight.bold)),
+                        if (c.digits.isNotEmpty) ...[_act('📞 Gọi', g ? Colors.grey : Colors.green, () => call(c.phone)), _act('💬 Nhắn tin', g ? Colors.grey : Colors.blue, () => zalo(c.phone))],
+                      ]),
+                    ])));
+                  }(),
                   if ('${h['note'] ?? ''}'.isNotEmpty) Text('${h['note']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ])),
                 PopupMenuButton<String>(onSelected: (v) async {
