@@ -14,6 +14,17 @@ const titles = ['Anh', 'Chị'];
 
 Future<void> call(String phone) => launchUrl(Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^\d+]'), '')));
 
+String zaloNum(String phone) {
+  var d = phone.replaceAll(RegExp(r'\D'), '');
+  if (d.startsWith('84')) d = '0${d.substring(2)}';
+  if (d.isNotEmpty && !d.startsWith('0')) d = '0$d';
+  return d;
+}
+
+Future<void> zalo(String phone) => launchUrl(Uri.parse('https://zalo.me/${zaloNum(phone)}'), mode: LaunchMode.externalApplication);
+
+Widget _act(String t, Color c, VoidCallback f) => Padding(padding: const EdgeInsets.only(left: 4), child: OutlinedButton(onPressed: f, style: OutlinedButton.styleFrom(foregroundColor: c, side: BorderSide(color: c), padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 30), tapTargetSize: MaterialTapTargetSize.shrinkWrap, textStyle: const TextStyle(fontSize: 12)), child: Text(t)));
+
 String shareText(Map h) {
   final cs = contactsOf(h);
   return '📞 ${h['name']}\n${cs.isEmpty ? 'Chưa có SĐT' : cs.map((c) => '• ${c.label}').join('\n')}${'${h['note'] ?? ''}'.isEmpty ? '' : '\n${h['note']}'}';
@@ -63,6 +74,7 @@ class _PhonePageState extends State<PhonePage> {
                   for (final c in cs) InkWell(onTap: () => call(c.phone), child: Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
                     const Icon(Icons.call, size: 16, color: Colors.green), const SizedBox(width: 6),
                     Expanded(child: Text(c.label, style: const TextStyle(fontSize: 14, color: Colors.blue))),
+                    if (c.digits.isNotEmpty) ...[_act('📞 Gọi', Colors.green, () => call(c.phone)), _act('💬 Nhắn tin', Colors.blue, () => zalo(c.phone))],
                   ]))),
                   if ('${h['note'] ?? ''}'.isNotEmpty) Text('${h['note']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ])),
