@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
+import 'contacts.dart';
 import 'hub_seed.dart';
 import 'price_table.dart';
 
@@ -49,10 +50,19 @@ class DB {
   static late Database db;
   static Future<void> init() async {
     // QUY TẮC: migration chỉ được THÊM (bảng/cột mới), không xoá dữ liệu người dùng.
-    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 4, onUpgrade: (d, o, n) async {
+    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 5, onUpgrade: (d, o, n) async {
       if (o < 2) await seedPrices(d, migrate: true);
       if (o < 3) { await d.execute(_hubSql); await dedupe(d); }
       if (o < 4) await d.execute(_phoneSql);
+      if (o < 5) {
+        final cols = (await d.rawQuery('PRAGMA table_info(phones)')).map((e) => '${e['name']}').toSet();
+        if (!cols.contains('contacts')) await d.execute('ALTER TABLE phones ADD COLUMN contacts TEXT');
+        // Chuyển SĐT cũ thành liên hệ đầu tiên (giữ nguyên cột phone/note cũ).
+        for (final r in await d.query('phones')) {
+          if ('${r['contacts'] ?? ''}'.isNotEmpty || '${r['phone'] ?? ''}'.trim().isEmpty) continue;
+          await d.update('phones', {'contacts': encodeContacts(contactsOf(r))}, where: 'id=?', whereArgs: [r['id']]);
+        }
+      }
     }, onCreate: (d, v) async {
       await d.execute(_hubSql);
       await d.execute(_phoneSql);
@@ -115,7 +125,7 @@ class DB {
     return r.isNotEmpty;
   }
 
-  static const _phoneSql = 'CREATE TABLE IF NOT EXISTS phones(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, note TEXT)';
+  static const _phoneSql = 'CREATE TABLE IF NOT EXISTS phones(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT, note TEXT, contacts TEXT)';
   static String key(Object? s) => '${s ?? ''}'.trim().toLowerCase();
 
   /// Tên hub mẫu mà người dùng đã xoá (để không thêm lại).
@@ -166,6 +176,12 @@ class DB {
 
   static Future<List<Map<String, Object?>>> phones() => db.query('phones', orderBy: 'name COLLATE NOCASE');
   static Future<void> savePhone(Map<String, Object?> h) async {
+    h = Map.of(h);
+    if (h['contacts'] is List<Contact>) {
+      final cs = h['contacts'] as List<Contact>;
+      h['contacts'] = encodeContacts(cs);
+      h['phone'] = cs.where((c) => c.phone.isNotEmpty).map((c) => c.phone).join(', ');
+    }
     h['id'] == null ? await db.insert('phones', Map.of(h)..remove('id')) : await db.update('phones', h, where: 'id=?', whereArgs: [h['id']]);
     await db.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h['name']]);
   }
