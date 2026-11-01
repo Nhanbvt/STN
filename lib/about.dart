@@ -11,6 +11,8 @@ Future<void> showAppInfo(BuildContext context) async {
   await showDialog(context: context, builder: (c) => AlertDialog(
     title: const Text('Thông tin App', textAlign: TextAlign.center),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.asset('assets/app_icon.png', height: 96, width: 96)),
+      const SizedBox(height: 8),
       Text(info.appName.isEmpty ? 'Sổ Thu Nhập' : info.appName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       Text('Phiên bản ${info.version} (build ${info.buildNumber})'),
       const SizedBox(height: 4),
