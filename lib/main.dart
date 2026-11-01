@@ -17,11 +17,18 @@ const kOrange = Color(0xFFFF7043);
 final money = NumberFormat('#,###', 'vi_VN');
 String vnd(num v) => '${money.format(v.round())} đ';
 String ymd(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
+/// Ẩn/hiện số tiền (lưu trong settings, dùng chung toàn app).
+final hideMoney = ValueNotifier<bool>(false);
+String vndH(num v) => hideMoney.value ? '********' : vnd(v);
+Future<void> toggleHide() async { hideMoney.value = !hideMoney.value; await DB.set('hide_money', hideMoney.value ? '1' : '0'); }
+Widget eyeBtn({Color? color, double size = 18}) => ValueListenableBuilder<bool>(valueListenable: hideMoney, builder: (_, h, __) => InkWell(onTap: toggleHide, child: Padding(padding: const EdgeInsets.all(2), child: Icon(h ? Icons.visibility_off : Icons.visibility, size: size, color: color))));
+
 String fmtNum(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DB.init();
+  hideMoney.value = await DB.get('hide_money') == '1';
   try { await DB.seedHubs(); } catch (_) {}
   try { await DB.syncPhones(phoneSeed); } catch (_) {}
   runApp(MaterialApp(
@@ -39,12 +46,15 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  void _onHide() { if (mounted) setState(() {}); }
+  @override
+  void dispose() { hideMoney.removeListener(_onHide); super.dispose(); }
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
   List<Trip> all = [];
   String q = '', name = '', driverId = '', vehicle = vehicles[0];
 
   @override
-  void initState() { super.initState(); load(); WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, silent: true)); }
+  void initState() { super.initState(); hideMoney.addListener(_onHide); load(); WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, silent: true)); }
 
   Future<void> load() async {
     all = await DB.trips();
@@ -97,14 +107,14 @@ class _HomeState extends State<Home> {
               Wrap(spacing: 18, runSpacing: 6, children: [
                 stat('Số chuyến', '${p.trips}'),
                 stat('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
-                stat('Tiền chuyến', vnd(p.tripMoney)),
-                stat('Tiền lương', vnd(p.luong)),
+                stat('Tiền chuyến', vndH(p.tripMoney), eye: true),
+                stat('Tiền công', vndH(p.luong), eye: true),
                 if (p.congTangCa > 0) stat('Tăng ca (${fmtNum(p.congTangCa)} công x2)', vnd(p.tangCa)),
               ]),
               const SizedBox(height: 8),
               Center(child: Column(children: [
                 const Text('TỔNG CỘNG', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white70, letterSpacing: 1)),
-                Text(vnd(p.tong), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.yellowAccent)),
+                Text(vndH(p.tong), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.yellowAccent)),
               ])),
             ]),
           ),
@@ -143,8 +153,8 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Widget stat(String k, String v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(k, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+  Widget stat(String k, String v, {bool eye = false}) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [Text(k, style: const TextStyle(color: Colors.white70, fontSize: 12)), if (eye) ...[const SizedBox(width: 4), eyeBtn(color: Colors.white70, size: 16)]]),
         Text(v, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
       ]);
 
@@ -387,10 +397,13 @@ class StatsPage extends StatefulWidget {
 }
 
 class _StatsPageState extends State<StatsPage> {
+  void _onHide() { if (mounted) setState(() {}); }
+  @override
+  void dispose() { hideMoney.removeListener(_onHide); super.dispose(); }
   List<Fuel> fuels = [];
   late DateTime periodStart = fuelPeriod(DateTime.now()).$1;
   @override
-  void initState() { super.initState(); load(); }
+  void initState() { super.initState(); hideMoney.addListener(_onHide); load(); }
   Future<void> load() async { fuels = await DB.fuels(); setState(() {}); }
 
   @override
@@ -403,22 +416,22 @@ class _StatsPageState extends State<StatsPage> {
     final df = DateFormat('dd/MM/yyyy');
     row(String k, String v, [Color? c]) => ListTile(dense: true, title: Text(k), trailing: Text(v, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: c)));
     return Scaffold(
-      appBar: AppBar(title: const Text('Thống kê & Nhiên liệu'), backgroundColor: kRed, foregroundColor: Colors.white),
+      appBar: AppBar(title: const Text('Thống kê & Nhiên liệu'), backgroundColor: kRed, foregroundColor: Colors.white, actions: [Padding(padding: const EdgeInsets.only(right: 12), child: eyeBtn(color: Colors.white, size: 26))]),
       body: ListView(padding: const EdgeInsets.all(12), children: [
         Card(child: Column(children: [
           ListTile(title: Text('Tháng ${widget.month.month}/${widget.month.year}', style: const TextStyle(fontWeight: FontWeight.bold, color: kRed))),
           row('Số ngày chạy', '${p.days}'),
           row('Tổng chuyến', '${p.trips}'),
           row('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
-          row('Tiền chuyến', vnd(p.tripMoney), Colors.blue),
-          row('Tiền công (${fmtNum(p.congThuong)} công)', vnd(p.luong)),
+          row('Tiền chuyến', vndH(p.tripMoney), Colors.blue),
+          row('Tiền công (${fmtNum(p.congThuong)} công)', vndH(p.luong)),
           if (p.congTangCa > 0) row('Tăng ca (${fmtNum(p.congTangCa)} công x2)', vnd(p.tangCa), Colors.deepOrange),
-          row('TỔNG', vnd(p.tong), kRed),
+          row('TỔNG', vndH(p.tong), kRed),
         ])),
         Card(child: Column(children: [
           ListTile(
             leading: IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setState(() => periodStart = DateTime(s.year, s.month - 1, 26))),
-            title: Text('⛽ Kỳ 26-25: ${df.format(s)} → ${df.format(e)}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text('⛽ ${df.format(s)} → ${df.format(e)}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
             trailing: IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => setState(() => periodStart = DateTime(s.year, s.month + 1, 26))),
           ),
           row('Tổng lít đổ', '${fmtNum(tl)} L'),
