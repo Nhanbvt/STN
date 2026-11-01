@@ -12,13 +12,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Version from run number
+        run: |
+          N=${{ github.run_number }}
+          echo "VER=$((1 + N / 100)).$(((N / 10) % 10)).$((N % 10))" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.1'
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build ios --no-codesign --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+      - run: flutter build ios --no-codesign --release --build-name=${{ env.VER }} --build-number=${{ github.run_number }}
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
@@ -28,13 +32,13 @@ jobs:
         with:
           name: SoThuNhap-ipa
           path: SoThuNhap.ipa
-      - run: cp SoThuNhap.ipa SoThuNhap-1.0.${{ github.run_number }}-unsigned.ipa
+      - run: cp SoThuNhap.ipa SoThuNhap-${{ env.VER }}-unsigned.ipa
       - name: Attach IPA to GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          files: SoThuNhap-1.0.${{ github.run_number }}-unsigned.ipa
+          tag_name: v${{ env.VER }}
+          files: SoThuNhap-${{ env.VER }}-unsigned.ipa
 
   android:
     runs-on: ubuntu-latest
@@ -42,6 +46,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Version from run number
+        run: |
+          N=${{ github.run_number }}
+          echo "VER=$((1 + N / 100)).$(((N / 10) % 10)).$((N % 10))" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -62,18 +70,18 @@ jobs:
           echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n' "$KS_PASS" "$KEY_PASS" "$KEY_ALIAS" "$RUNNER_TEMP/release.jks" > android/key.properties
       - run: flutter pub get
-      - run: flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
-      - run: cp build/app/outputs/flutter-apk/app-release.apk SoThuNhap-1.0.${{ github.run_number }}.apk
+      - run: flutter build apk --release --build-name=${{ env.VER }} --build-number=${{ github.run_number }}
+      - run: cp build/app/outputs/flutter-apk/app-release.apk SoThuNhap-${{ env.VER }}.apk
       - uses: actions/upload-artifact@v4
         with:
           name: SoThuNhap-apk
-          path: SoThuNhap-1.0.${{ github.run_number }}.apk
+          path: SoThuNhap-${{ env.VER }}.apk
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Sổ Thu Nhập 1.0.${{ github.run_number }}
+          tag_name: v${{ env.VER }}
+          name: Sổ Thu Nhập ${{ env.VER }}
           body: ${{ github.event.head_commit.message }}
-          files: SoThuNhap-1.0.${{ github.run_number }}.apk
+          files: SoThuNhap-${{ env.VER }}.apk
           make_latest: true
