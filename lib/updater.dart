@@ -44,7 +44,7 @@ Future<void> checkForUpdate(BuildContext context, {bool silent = true}) async {
     if (!context.mounted) return;
     final ok = await showDialog<bool>(context: context, builder: (d) => AlertDialog(
       title: Text('Có bản mới $latest'),
-      content: SingleChildScrollView(child: Text('Bản hiện tại: $current\n\n${j['body'] ?? ''}\n\nDữ liệu trong app được giữ nguyên khi cập nhật.')),
+      content: SingleChildScrollView(child: Text('Bản hiện tại: $current\n\nDữ liệu trong app được giữ nguyên khi cập nhật.')),
       actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('ĐỂ SAU')), FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('CẬP NHẬT'))],
     ));
     if (ok != true || !context.mounted) return;

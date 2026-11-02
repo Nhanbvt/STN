@@ -279,7 +279,7 @@ class DB {
 
   static Future<Map<String, dynamic>> exportAll() async => {
         'app': 'so_thu_nhap', 'version': 1,
-        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) t: await db.query(t),
+        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) t: t == 'settings' ? await db.query(t, where: "k NOT LIKE 'admin_%' AND k != 'hub_data_applied'") : await db.query(t),
       };
   /// Nhận dạng file: định dạng của app này (có 'app') hoặc app Android cũ (trips có 'tripCode').
   static bool isOldFormat(Map<String, dynamic> d) => d['trips'] is List && (d['trips'] as List).isNotEmpty && (d['trips'] as List).first is Map && ((d['trips'] as List).first as Map).containsKey('tripCode');
@@ -345,8 +345,12 @@ class DB {
     await db.transaction((tx) async {
       for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) {
         if (data[t] is! List) continue;
-        await tx.delete(t);
-        for (final row in data[t]) { await tx.insert(t, Map<String, Object?>.from(row)); }
+        final keep = t == 'settings';
+        await (keep ? tx.delete(t, where: "k NOT LIKE 'admin_%' AND k != 'hub_data_applied'") : tx.delete(t));
+        for (final row in data[t]) {
+          if (keep && ('${row['k']}'.startsWith('admin_') || row['k'] == 'hub_data_applied')) continue;
+          await tx.insert(t, Map<String, Object?>.from(row), conflictAlgorithm: ConflictAlgorithm.replace);
+        }
       }
       await dedupe(tx);
     });

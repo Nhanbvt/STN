@@ -1,3 +1,4 @@
+import 'hub_sync.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -40,7 +41,7 @@ class _PhonePageState extends State<PhonePage> {
   List<Map<String, Object?>> rows = [];
   String q = '';
   @override
-  void initState() { super.initState(); load(); }
+  void initState() { super.initState(); load(); syncHubData().then((ch) { if (ch) load(); }); }
   Future<void> load() async { rows = await DB.phones(); if (mounted) setState(() {}); }
 
   Future<void> edit([Map<String, Object?>? h]) async {

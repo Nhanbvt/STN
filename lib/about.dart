@@ -2,19 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'admin.dart';
 
 const zaloGroup = 'https://zalo.me/g/9bxfh7yuvs5drkegefpp';
 
 Future<void> showAppInfo(BuildContext context) async {
   final info = await PackageInfo.fromPlatform();
   if (!context.mounted) return;
+  var taps = 0;
+  var lastTap = DateTime(2000);
   await showDialog(context: context, builder: (c) => AlertDialog(
     title: const Text('Thông tin App', textAlign: TextAlign.center),
     content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
       ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.asset('assets/app_icon.png', height: 96, width: 96)),
       const SizedBox(height: 8),
       Text(info.appName.isEmpty ? 'Sổ Thu Nhập' : info.appName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      Text('Phiên bản ${info.version} (build ${info.buildNumber})'),
+      GestureDetector(behavior: HitTestBehavior.opaque, onTap: () {
+        final now = DateTime.now();
+        taps = now.difference(lastTap) < const Duration(seconds: 2) ? taps + 1 : 1;
+        lastTap = now;
+        if (taps >= 7) { taps = 0; Navigator.pop(c); openAdmin(context); }
+      }, child: Text('Phiên bản ${info.version} (build ${info.buildNumber})')),
       const SizedBox(height: 4),
       const Text('Design: Bùi Văn Trung Nhân', style: TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 12),

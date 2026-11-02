@@ -1,3 +1,4 @@
+import 'hub_sync.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -83,7 +84,7 @@ class _HubPageState extends State<HubPage> {
   List<Map<String, Object?>> hubs = [];
   String q = '';
   @override
-  void initState() { super.initState(); load(); }
+  void initState() { super.initState(); load(); syncHubData().then((ch) { if (ch) load(); }); }
   Future<void> load() async { hubs = await DB.hubs(); if (mounted) setState(() {}); }
 
   Future<void> edit([Map<String, Object?>? h]) async {

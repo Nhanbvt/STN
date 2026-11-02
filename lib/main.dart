@@ -11,6 +11,7 @@ import 'about.dart';
 import 'phone_seed.dart';
 import 'updater.dart';
 import 'db.dart';
+import 'hub_sync.dart';
 import 'place_search.dart';
 
 const kRed = Color(0xFFD32F2F);
@@ -32,6 +33,7 @@ void main() async {
   hideMoney.value = await DB.get('hide_money') == '1';
   try { await DB.seedHubs(); } catch (_) {}
   try { await DB.syncPhones(phoneSeed); } catch (_) {}
+  syncHubData();
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Sổ Thu Nhập',

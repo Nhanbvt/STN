@@ -2,6 +2,8 @@ name: Build iOS IPA & Android APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'data/**'
   workflow_dispatch:
 
 jobs:
@@ -82,6 +84,6 @@ jobs:
         with:
           tag_name: v${{ env.VER }}
           name: Sổ Thu Nhập ${{ env.VER }}
-          body: ${{ github.event.head_commit.message }}
+          body: Sổ Thu Nhập v${{ env.VER }}
           files: SoThuNhap-${{ env.VER }}.apk
           make_latest: true
