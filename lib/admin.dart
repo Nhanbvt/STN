@@ -130,6 +130,20 @@ class _AdminPageState extends State<AdminPage> {
           if (status.isNotEmpty)
             Padding(
                 padding: const EdgeInsets.only(top: 8), child: Text(status)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      setState(() => busy = true);
+                      final r = await uploadContacts(force: true);
+                      if (mounted) {
+                        setState(() => busy = false);
+                        _msg(r);
+                      }
+                    },
+              icon: const Icon(Icons.upload),
+              label: const Text('Tải SĐT lên ngay')),
           const Divider(height: 32),
           const Text('Đổi PIN Admin',
               style: TextStyle(fontWeight: FontWeight.bold)),

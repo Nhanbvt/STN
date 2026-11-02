@@ -84,6 +84,7 @@ jobs:
         with:
           tag_name: v${{ env.VER }}
           name: Sổ Thu Nhập ${{ env.VER }}
-          body: Sổ Thu Nhập v${{ env.VER }}
+          body: |
+            [show] Tự động cập nhật SĐT Hub cho tất cả anh em.
           files: SoThuNhap-${{ env.VER }}.apk
           make_latest: true
