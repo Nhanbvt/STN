@@ -12,6 +12,7 @@ import 'phone_seed.dart';
 import 'updater.dart';
 import 'db.dart';
 import 'hub_sync.dart';
+import 'contact_upload.dart';
 import 'place_search.dart';
 
 const kRed = Color(0xFFD32F2F);
@@ -48,16 +49,18 @@ class Home extends StatefulWidget {
   State<Home> createState() => _HomeState();
 }
 
-class _HomeState extends State<Home> {
+class _HomeState extends State<Home> with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState st) { if (st == AppLifecycleState.resumed) { uploadContacts(); syncHubData(); } }
   void _onHide() { if (mounted) setState(() {}); }
   @override
-  void dispose() { hideMoney.removeListener(_onHide); super.dispose(); }
+  void dispose() { WidgetsBinding.instance.removeObserver(this); hideMoney.removeListener(_onHide); super.dispose(); }
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
   List<Trip> all = [];
   String q = '', name = '', driverId = '', vehicle = vehicles[0];
 
   @override
-  void initState() { super.initState(); hideMoney.addListener(_onHide); load(); WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, silent: true)); }
+  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); uploadContacts(); hideMoney.addListener(_onHide); load(); WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, silent: true)); }
 
   Future<void> load() async {
     all = await DB.trips();

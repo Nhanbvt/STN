@@ -63,10 +63,6 @@ class _PhonePageState extends State<PhonePage> {
     final shown = rows.where((h) => q.isEmpty || '${h['name']} ${contactsOf(h).map((c) => '${c.label} ${c.digits}').join(' ')} ${h['note']}'.toLowerCase().contains(q.toLowerCase())).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Số ĐT Hub'), backgroundColor: _red, foregroundColor: Colors.white, actions: [
-        PopupMenuButton<String>(onSelected: (v) async {
-          if (v == 'exp') await exportPhones(context, rows);
-          if (v == 'imp' && await importPhones(context)) load();
-        }, itemBuilder: (_) => const [PopupMenuItem(value: 'exp', child: Text('📤 Xuất file')), PopupMenuItem(value: 'imp', child: Text('📥 Nhập & đối chiếu file'))]),
       ]),
       floatingActionButton: FloatingActionButton(backgroundColor: _red, foregroundColor: Colors.white, onPressed: () => edit(), child: const Icon(Icons.add_call)),
       body: Column(children: [

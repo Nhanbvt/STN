@@ -24,7 +24,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build ios --no-codesign --release --build-name=${{ env.VER }} --build-number=${{ github.run_number }}
+      - run: flutter build ios --no-codesign --release --build-name=${{ env.VER }} --build-number=${{ github.run_number }} --dart-define=STN_UPLOAD_TOKEN=${{ secrets.STN_UPLOAD_TOKEN }}
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
@@ -72,7 +72,7 @@ jobs:
           echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n' "$KS_PASS" "$KEY_PASS" "$KEY_ALIAS" "$RUNNER_TEMP/release.jks" > android/key.properties
       - run: flutter pub get
-      - run: flutter build apk --release --build-name=${{ env.VER }} --build-number=${{ github.run_number }}
+      - run: flutter build apk --release --build-name=${{ env.VER }} --build-number=${{ github.run_number }} --dart-define=STN_UPLOAD_TOKEN=${{ secrets.STN_UPLOAD_TOKEN }}
       - run: cp build/app/outputs/flutter-apk/app-release.apk SoThuNhap-${{ env.VER }}.apk
       - uses: actions/upload-artifact@v4
         with:

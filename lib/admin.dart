@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'db.dart';
 import 'hub_sync.dart';
+import 'contact_upload.dart';
 
 String pinHash(String pin) =>
     sha256.convert(utf8.encode('stn-admin:$pin')).toString();
