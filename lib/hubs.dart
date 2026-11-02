@@ -84,7 +84,7 @@ class _HubPageState extends State<HubPage> {
   List<Map<String, Object?>> hubs = [];
   String q = '';
   @override
-  void initState() { super.initState(); load(); syncHubData().then((ch) { if (ch) load(); }); }
+  void initState() { super.initState(); load(); syncHubData().then((r) { if (r.changed) load(); if (r.phoneNotice != null && mounted) { pendingHubPhoneNotice = null; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.phoneNotice!))); } }); }
   Future<void> load() async { hubs = await DB.hubs(); if (mounted) setState(() {}); }
 
   Future<void> edit([Map<String, Object?>? h]) async {

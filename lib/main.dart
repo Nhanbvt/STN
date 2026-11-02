@@ -51,7 +51,13 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> with WidgetsBindingObserver {
   @override
-  void didChangeAppLifecycleState(AppLifecycleState st) { if (st == AppLifecycleState.resumed) { uploadContacts(); syncHubData(); } }
+  void didChangeAppLifecycleState(AppLifecycleState st) { if (st == AppLifecycleState.resumed) { uploadContacts(); syncHubData().then((_) => _flushHubNotice()); } }
+  void _flushHubNotice() {
+    final n = pendingHubPhoneNotice;
+    if (n == null || !mounted) return;
+    pendingHubPhoneNotice = null;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(n)));
+  }
   void _onHide() { if (mounted) setState(() {}); }
   @override
   void dispose() { WidgetsBinding.instance.removeObserver(this); hideMoney.removeListener(_onHide); super.dispose(); }
@@ -60,7 +66,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   String q = '', name = '', driverId = '', vehicle = vehicles[0];
 
   @override
-  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); uploadContacts(); hideMoney.addListener(_onHide); load(); WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, silent: true)); }
+  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); uploadContacts(); hideMoney.addListener(_onHide); load(); WidgetsBinding.instance.addPostFrameCallback((_) { checkForUpdate(context, silent: true); _flushHubNotice(); }); }
 
   Future<void> load() async {
     all = await DB.trips();

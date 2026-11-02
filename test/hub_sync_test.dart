@@ -33,6 +33,25 @@ void main() {
     expect(cs[0].name, 'Tú'); // không sửa tên
     expect(cs[0].inactive, true); // nhận cờ Ko dùng
     expect(cs[1].phone, '0911111111');
+    expect(p.newPhones, 2); // Hub A: 0911111111; Hub C: 0922 (trùng 0901 bỏ qua)
+    expect(p.hubsWithNewPhones, 2); // Hub A + Hub C
+    expect(p.phoneNotice, 'Đã cập nhật SĐT cho 2 hub (thêm 2 số mới)');
+  });
+
+  test('location-only and inactive-only: no phone notice', () {
+    final hubs = <Map<String, Object?>>[
+      {'id': 1, 'name': 'A', 'lat': 1.0, 'lng': 2.0},
+    ];
+    final phones = <Map<String, Object?>>[
+      {'id': 9, 'name': 'A', 'contacts': encodeContacts([Contact(phone: '0901', inactive: false)])},
+    ];
+    final loc = planHubMerge(hubs, phones, {'hubs': [
+      {'name': 'A', 'lat': 9.0, 'lng': 9.0, 'contacts': [{'phone': '0901', 'active': false}]},
+    ]});
+    expect(loc.hubLocUpdates.length, 1);
+    expect(loc.newPhones, 0);
+    expect(loc.phoneNotice, isNull);
+    expect(loc.phoneUpdates.length, 1); // cờ Ko dùng vẫn ghi
   });
 
   test('never re-activates and is idempotent', () {

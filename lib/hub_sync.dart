@@ -18,12 +18,28 @@ class HubMergePlan {
   final hubLocUpdates = <(int, double, double)>[];
   final phoneInserts = <(String, List<Contact>)>[];
   final phoneUpdates = <(int, List<Contact>)>[];
+  /// Chỉ đếm số ĐT mới (chuẩn hoá, chưa có trên máy). Cờ Ko dùng / vị trí không tính.
+  int newPhones = 0;
+  int hubsWithNewPhones = 0;
   bool get isEmpty =>
       hubInserts.isEmpty &&
       hubLocUpdates.isEmpty &&
       phoneInserts.isEmpty &&
       phoneUpdates.isEmpty;
+  String? get phoneNotice => newPhones > 0
+      ? 'Đã cập nhật SĐT cho $hubsWithNewPhones hub (thêm $newPhones số mới)'
+      : null;
 }
+
+/// Kết quả sync: thay đổi bất kỳ + thông báo SĐT mới (null nếu không có số mới).
+class HubSyncResult {
+  final bool changed;
+  final String? phoneNotice;
+  const HubSyncResult({this.changed = false, this.phoneNotice});
+}
+
+/// Thông báo SĐT chờ hiện (Home / màn hình đang mở).
+String? pendingHubPhoneNotice;
 
 /// Gộp: thêm hub thiếu; vị trí admin ghi đè; thêm liên hệ thiếu (theo số); nhận cờ Ko dùng=true. Không xoá gì.
 HubMergePlan planHubMerge(List<Map<String, Object?>> hubs,
@@ -63,16 +79,31 @@ HubMergePlan planHubMerge(List<Map<String, Object?>> hubs,
     if (r == null) {
       final prev = pendingPhones[k];
       final merged = mergeContacts(prev?.$2 ?? [], inc);
-      if (prev != null || inc.isNotEmpty || h == null)
+      if (prev != null || inc.isNotEmpty || h == null) {
         pendingPhones[k] = (prev?.$1 ?? name, merged);
+      }
     } else if (inc.isNotEmpty && r['id'] is int) {
       final mine = contactsOf(r);
+      final before = {for (final c in mine) if (c.digits.isNotEmpty) c.digits};
       final merged = mergeContacts(mine, inc);
-      if (!sameContacts(mine, merged))
+      if (!sameContacts(mine, merged)) {
         p.phoneUpdates.add((r['id'] as int, merged));
+        final added = merged.where((c) => c.digits.isNotEmpty && !before.contains(c.digits)).length;
+        if (added > 0) {
+          p.newPhones += added;
+          p.hubsWithNewPhones++;
+        }
+      }
     }
   }
-  p.phoneInserts.addAll(pendingPhones.values);
+  for (final e in pendingPhones.values) {
+    p.phoneInserts.add(e);
+    final n = e.$2.where((c) => c.digits.isNotEmpty).length;
+    if (n > 0) {
+      p.newPhones += n;
+      p.hubsWithNewPhones++;
+    }
+  }
   return p;
 }
 
@@ -151,12 +182,13 @@ Future<void> applyHubPlan(HubMergePlan p) async {
 
 DateTime? _lastTry;
 
-/// Tải dữ liệu hub của admin và gộp im lặng. Lỗi bỏ qua. Trả về true nếu có thay đổi.
-Future<bool> syncHubData({bool force = false}) async {
+/// Tải dữ liệu hub của admin và gộp. Vị trí im lặng; SĐT mới → pendingHubPhoneNotice.
+Future<HubSyncResult> syncHubData({bool force = false}) async {
   if (!force &&
       _lastTry != null &&
-      DateTime.now().difference(_lastTry!) < const Duration(minutes: 10))
-    return false;
+      DateTime.now().difference(_lastTry!) < const Duration(minutes: 10)) {
+    return const HubSyncResult();
+  }
   _lastTry = DateTime.now();
   final c = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
@@ -166,19 +198,20 @@ Future<bool> syncHubData({bool force = false}) async {
     final res = await req.close().timeout(const Duration(seconds: 20));
     if (res.statusCode != 200) {
       await res.drain<void>();
-      return false;
+      return const HubSyncResult();
     }
     final j = jsonDecode(await res.transform(utf8.decoder).join())
         as Map<String, dynamic>;
     final at = (j['updatedAt'] as num?)?.toInt() ?? 0;
     final last = int.tryParse(await DB.get('hub_data_applied', '0')) ?? 0;
-    if (at <= last) return false;
+    if (at <= last) return const HubSyncResult();
     final plan = planHubMerge(await DB.hubs(), await DB.phones(), j);
     if (!plan.isEmpty) await applyHubPlan(plan);
     await DB.set('hub_data_applied', '$at');
-    return !plan.isEmpty;
+    if (plan.phoneNotice != null) pendingHubPhoneNotice = plan.phoneNotice;
+    return HubSyncResult(changed: !plan.isEmpty, phoneNotice: plan.phoneNotice);
   } catch (_) {
-    return false;
+    return const HubSyncResult();
   } finally {
     c.close(force: true);
   }

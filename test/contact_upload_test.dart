@@ -37,5 +37,8 @@ void main() {
     expect(up[1]!.map((c) => c.phone), ['0911']);
     expect(up[2]!.map((c) => '${c.name}:${c.phone}'), ['Cũ:090 123 4567', 'Mới:0922']);
     expect(p.phoneInserts, isEmpty);
+    expect(p.newPhones, 2); // 0911 + 0922; 84901234567 trùng
+    expect(p.hubsWithNewPhones, 2);
+    expect(p.phoneNotice, contains('thêm 2 số mới'));
   });
 }

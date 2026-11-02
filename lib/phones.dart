@@ -41,7 +41,7 @@ class _PhonePageState extends State<PhonePage> {
   List<Map<String, Object?>> rows = [];
   String q = '';
   @override
-  void initState() { super.initState(); load(); syncHubData().then((ch) { if (ch) load(); }); }
+  void initState() { super.initState(); load(); syncHubData().then((r) { if (r.changed) load(); if (r.phoneNotice != null && mounted) { pendingHubPhoneNotice = null; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.phoneNotice!))); } }); }
   Future<void> load() async { rows = await DB.phones(); if (mounted) setState(() {}); }
 
   Future<void> edit([Map<String, Object?>? h]) async {
