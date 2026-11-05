@@ -2,6 +2,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'contacts.dart';
 import 'hub_seed.dart';
+import 'hub_seed_vung.dart';
+import 'hub_region.dart';
 import 'price_table.dart';
 
 const vehicles = ['Xe Van < 1 Tấn', 'Xe Tải 2 Tấn', 'Xe Tải 5 Tấn', 'Xe Tải 8 Tấn'];
@@ -50,7 +52,7 @@ class DB {
   static late Database db;
   static Future<void> init() async {
     // QUY TẮC: migration chỉ được THÊM (bảng/cột mới), không xoá dữ liệu người dùng.
-    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 5, onUpgrade: (d, o, n) async {
+    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 6, onUpgrade: (d, o, n) async {
       if (o < 2) await seedPrices(d, migrate: true);
       if (o < 3) { await d.execute(_hubSql); await dedupe(d); }
       if (o < 4) await d.execute(_phoneSql);
@@ -61,6 +63,14 @@ class DB {
         for (final r in await d.query('phones')) {
           if ('${r['contacts'] ?? ''}'.isNotEmpty || '${r['phone'] ?? ''}'.trim().isEmpty) continue;
           await d.update('phones', {'contacts': encodeContacts(contactsOf(r))}, where: 'id=?', whereArgs: [r['id']]);
+        }
+      }
+      if (o < 6) {
+        final cols = (await d.rawQuery('PRAGMA table_info(hubs)')).map((e) => '${e['name']}').toSet();
+        if (!cols.contains('region')) await d.execute('ALTER TABLE hubs ADD COLUMN region TEXT');
+        // Phân loại lại: LAN/TGG/BTE → nội vùng; Seller → seller; còn lại theo quy tắc (giữ nguyên SĐT/định vị).
+        for (final r in await d.query('hubs')) {
+          await d.update('hubs', {'region': classifyHubRegion('${r['name']}')}, where: 'id=?', whereArgs: [r['id']]);
         }
       }
     }, onCreate: (d, v) async {
@@ -97,7 +107,7 @@ class DB {
     _needRecompute = true;
   }
   static bool _needRecompute = false;
-  static const _hubSql = 'CREATE TABLE IF NOT EXISTS hubs(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lng REAL, note TEXT)';
+  static const _hubSql = 'CREATE TABLE IF NOT EXISTS hubs(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lng REAL, note TEXT, region TEXT)';
 
   static String tripKey(Map t) => '${t['note'] ?? ''}'.trim().isNotEmpty
       ? 'C:${'${t['note']}'.trim().toUpperCase()}|${t['date']}|${t['from_pts']}|${t['to_pts']}'
@@ -133,6 +143,7 @@ class DB {
 
   /// Mỗi lần mở app: thêm các hub mẫu CHƯA có (theo tên, không phân biệt hoa thường).
   /// Không sửa/xoá hub của người dùng; hub mẫu người dùng đã xoá sẽ không bị thêm lại.
+  /// Bản mới: thêm hub nội vùng từ CSV + HCM Mega SOC; gán cột region.
   static Future<int> seedHubs() async {
     final have = (await db.query('hubs', columns: ['name'])).map((e) => key(e['name'])).toSet();
     final deleted = await _seedDeleted();
@@ -144,17 +155,49 @@ class DB {
     await set('hub_seed_deleted_init', '1');
     var added = 0;
     final b = db.batch();
-    for (final h in hubSeed) {
-      final k = key(h.$1);
-      if (deleted.contains(k) || !have.add(k)) continue;
-      final note = [h.$4, if (h.$2 == null) h.$5].where((e) => e.isNotEmpty).join('\n');
-      b.insert('hubs', {'name': h.$1, 'lat': h.$2, 'lng': h.$3, 'note': note});
-      b.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h.$1]);
+    void addOne(String name, double? lat, double? lng, String addr, String link) {
+      final k = key(name);
+      if (deleted.contains(k) || !have.add(k)) return;
+      final note = [addr, if (lat == null) link].where((e) => e.isNotEmpty).join('\n');
+      b.insert('hubs', {'name': name, 'lat': lat, 'lng': lng, 'note': note, 'region': classifyHubRegion(name)});
+      b.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [name]);
       added++;
     }
+    for (final h in hubSeed) { addOne(h.$1, h.$2, h.$3, h.$4, h.$5); }
+    for (final h in hubSeedVung) { addOne(h.$1, h.$2, h.$3, h.$4, h.$5); }
     await b.commit(noResult: true);
-    await set('hub_seed_v', '2');
+    added += await ensureMegaSoc();
+    // Backfill region (máy cũ / hub tự thêm chưa có region).
+    for (final r in await db.query('hubs')) {
+      final reg = '${r['region'] ?? ''}'.trim();
+      if (reg.isEmpty) {
+        await db.update('hubs', {'region': classifyHubRegion('${r['name']}')}, where: 'id=?', whereArgs: [r['id']]);
+      }
+    }
+    await set('hub_seed_v', '3');
     return added;
+  }
+
+  /// Thêm HCM Mega SOC vào Nội thành nếu chưa có; nếu đã có thì chỉ gắn region nội thành (không đè toạ độ/SĐT).
+  static Future<int> ensureMegaSoc() async {
+    const name = 'HCM Mega SOC';
+    const lat = 10.92086984908642;
+    const lng = 106.54956731965497;
+    const link = 'https://maps.app.goo.gl/Knmwscmi6pUzUnwd7';
+    final rows = await db.query('hubs', where: "LOWER(TRIM(name))=?", whereArgs: ['hcm mega soc']);
+    if (rows.isEmpty) {
+      await db.insert('hubs', {
+        'name': name,
+        'lat': lat,
+        'lng': lng,
+        'note': "Kho HCM Mega SOC - SPX Express, Củ Chi\n$link",
+        'region': kRegionNoiThanh,
+      });
+      await db.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [name]);
+      return 1;
+    }
+    await db.update('hubs', {'region': kRegionNoiThanh}, where: 'id=?', whereArgs: [rows.first['id']]);
+    return 0;
   }
 
   /// Mỗi lần mở app: hub nào trong Vị trí Hub (mẫu hoặc tự thêm) chưa có trong Số ĐT Hub thì thêm (SĐT trống).
@@ -209,13 +252,19 @@ class DB {
   }
 
   static Future<List<Map<String, Object?>>> hubs() => db.query('hubs', orderBy: 'name COLLATE NOCASE');
-  static Future<void> saveHub(Map<String, Object?> h) async => h['id'] == null ? await db.insert('hubs', Map.of(h)..remove('id')) : await db.update('hubs', h, where: 'id=?', whereArgs: [h['id']]);
+  static Future<void> saveHub(Map<String, Object?> h) async {
+    h = Map.of(h);
+    final reg = '${h['region'] ?? ''}'.trim();
+    if (reg.isEmpty) h['region'] = classifyHubRegion('${h['name'] ?? ''}');
+    h['id'] == null ? await db.insert('hubs', Map.of(h)..remove('id')) : await db.update('hubs', h, where: 'id=?', whereArgs: [h['id']]);
+    await db.rawInsert('INSERT OR IGNORE INTO places(name, uses) VALUES(?, 0)', [h['name']]);
+  }
   static Future<void> deleteHub(int id) async {
     final r = await db.query('hubs', where: 'id=?', whereArgs: [id]);
     await db.delete('hubs', where: 'id=?', whereArgs: [id]);
     if (r.isEmpty) return;
     final k = key(r.first['name']);
-    if (hubSeed.any((h) => key(h.$1) == k)) await set('hub_seed_deleted', ({...await _seedDeleted(), k}).join('\n'));
+    if (hubSeed.any((h) => key(h.$1) == k) || hubSeedVung.any((h) => key(h.$1) == k)) await set('hub_seed_deleted', ({...await _seedDeleted(), k}).join('\n'));
   }
 
   /// Giới hạn sửa vị trí: tối đa [kLocEditsPerMonth] lần / hub / tháng. Lưu ở settings 'loc_edit:<hub>' = 'YYYY-MM:n'.

@@ -6,10 +6,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'db.dart';
 import 'exchange.dart';
+import 'hub_region.dart';
+import 'hub_region_bar.dart';
 
 const hubFields = ['name', 'lat', 'lng', 'note'];
 
-const _red = Color(0xFFD32F2F);
+const _red = Color(0xFFC62828);
 
 /// Lấy toạ độ từ link Google Maps / Zalo / chuỗi "lat,lng".
 (double, double)? parseLatLng(String s) {
@@ -83,18 +85,22 @@ class HubPage extends StatefulWidget {
 class _HubPageState extends State<HubPage> {
   List<Map<String, Object?>> hubs = [];
   String q = '';
+  String region = kRegionNoiThanh;
   @override
   void initState() { super.initState(); load(); syncHubData().then((r) { if (r.changed) load(); if (r.phoneNotice != null && mounted) { pendingHubPhoneNotice = null; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.phoneNotice!))); } }); }
   Future<void> load() async { hubs = await DB.hubs(); if (mounted) setState(() {}); }
 
   Future<void> edit([Map<String, Object?>? h]) async {
-    final r = await showDialog<bool>(context: context, builder: (_) => HubDialog(hub: h));
+    final r = await showDialog<bool>(context: context, builder: (_) => HubDialog(hub: h, region: h == null ? region : null));
     if (r == true) load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final shown = hubs.where((h) => q.isEmpty || '${h['name']} ${h['note']}'.toLowerCase().contains(q.toLowerCase())).toList();
+    final shown = hubs.where((h) {
+      if (hubRegionOf(h) != region) return false;
+      return q.isEmpty || '${h['name']} ${h['note']}'.toLowerCase().contains(q.toLowerCase());
+    }).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Vị trí Hub'), backgroundColor: _red, foregroundColor: Colors.white, actions: [
         PopupMenuButton<String>(onSelected: (v) async {
@@ -104,6 +110,7 @@ class _HubPageState extends State<HubPage> {
       ]),
       floatingActionButton: FloatingActionButton(backgroundColor: _red, foregroundColor: Colors.white, onPressed: () => edit(), child: const Icon(Icons.add_location_alt)),
       body: Column(children: [
+        HubRegionBar(value: region, onChanged: (v) => setState(() => region = v)),
         Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => q = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Tìm hub...', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(30))))),
         Expanded(child: shown.isEmpty ? const Center(child: Text('Chưa có hub. Bấm + để thêm.')) : ListView(children: [
           for (final h in shown) Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), child: ListTile(
@@ -140,7 +147,9 @@ class _HubPageState extends State<HubPage> {
 
 class HubDialog extends StatefulWidget {
   final Map<String, Object?>? hub;
-  const HubDialog({super.key, this.hub});
+  /// Nhóm khi thêm mới (ô đang chọn). Null = giữ/phân loại theo tên.
+  final String? region;
+  const HubDialog({super.key, this.hub, this.region});
   @override
   State<HubDialog> createState() => _HubDialogState();
 }
@@ -204,7 +213,10 @@ class _HubDialogState extends State<HubDialog> {
                 return;
               }
             }
-            await DB.saveHub({'id': widget.hub?['id'], 'name': name.text.trim(), 'lat': lat, 'lng': lng, 'note': note.text.trim()});
+            final reg = widget.hub != null
+                ? ('${widget.hub!['region'] ?? ''}'.trim().isNotEmpty ? '${widget.hub!['region']}' : classifyHubRegion(name.text.trim()))
+                : (widget.region ?? classifyHubRegion(name.text.trim()));
+            await DB.saveHub({'id': widget.hub?['id'], 'name': name.text.trim(), 'lat': lat, 'lng': lng, 'note': note.text.trim(), 'region': reg});
             if (context.mounted) Navigator.pop(context, true);
           }, child: const Text('LƯU')),
         ],

@@ -85,6 +85,11 @@ jobs:
           tag_name: v${{ env.VER }}
           name: Sổ Thu Nhập ${{ env.VER }}
           body: |
-            [show] Tự động cập nhật SĐT Hub cho tất cả anh em.
+            [show] Bản mới:
+            • Vị trí Hub và Số ĐT Hub chia 3 ô: Nội thành, Nội vùng, Seller
+            • Thêm đầy đủ hub miền Nam (Nội vùng) kèm định vị
+            • Hub Long An, Tiền Giang, Bến Tre chuyển sang Nội vùng (giữ nguyên số và định vị đã lưu)
+            • Thêm HCM Mega SOC vào Nội thành
+            • Sửa lỗi mở xem/sửa chuyến bị nhảy giá về 71k
           files: SoThuNhap-${{ env.VER }}.apk
           make_latest: true

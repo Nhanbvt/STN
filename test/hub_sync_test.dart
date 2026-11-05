@@ -66,4 +66,14 @@ void main() {
     expect(planHubMerge([], [], {}).isEmpty, true);
     expect(planHubMerge([], [], {'hubs': ['x', 1]}).isEmpty, true);
   });
+
+  test('remote region applied on insert; old clients without region classify', () {
+    final p = planHubMerge([], [], {'hubs': [
+      {'name': '70-LAN X', 'lat': 1.0, 'lng': 2.0, 'region': 'noi_vung', 'contacts': []},
+      {'name': 'HCMSeller-Y', 'lat': 1.0, 'lng': 2.0, 'contacts': []},
+    ]});
+    expect(p.hubInserts.length, 2);
+    expect(p.hubInserts[0]['region'], 'noi_vung');
+    expect(p.hubInserts[1]['region'], 'seller'); // classify by name
+  });
 }

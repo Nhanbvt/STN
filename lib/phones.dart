@@ -9,8 +9,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'contacts.dart';
 import 'db.dart';
 import 'exchange.dart';
+import 'hub_region.dart';
+import 'hub_region_bar.dart';
 
-const _red = Color(0xFFD32F2F);
+const _red = Color(0xFFC62828);
 const titles = ['Anh', 'Chị'];
 
 Future<void> call(String phone) => launchUrl(Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^\d+]'), '')));
@@ -39,13 +41,21 @@ class PhonePage extends StatefulWidget {
 
 class _PhonePageState extends State<PhonePage> {
   List<Map<String, Object?>> rows = [];
+  Map<String, String> hubRegions = {};
   String q = '';
+  String region = kRegionNoiThanh;
   @override
   void initState() { super.initState(); load(); syncHubData().then((r) { if (r.changed) load(); if (r.phoneNotice != null && mounted) { pendingHubPhoneNotice = null; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.phoneNotice!))); } }); }
-  Future<void> load() async { rows = await DB.phones(); if (mounted) setState(() {}); }
+  Future<void> load() async {
+    rows = await DB.phones();
+    hubRegions = {for (final h in await DB.hubs()) DB.key(h['name']): hubRegionOf(h)};
+    if (mounted) setState(() {});
+  }
+
+  String _regionOf(Map<String, Object?> h) => hubRegions[DB.key(h['name'])] ?? classifyHubRegion('${h['name'] ?? ''}');
 
   Future<void> edit([Map<String, Object?>? h]) async {
-    final r = await showDialog<bool>(context: context, builder: (_) => PhoneDialog(item: h));
+    final r = await showDialog<bool>(context: context, builder: (_) => PhoneDialog(item: h, region: h == null ? region : null));
     if (r == true) load();
   }
 
@@ -60,12 +70,16 @@ class _PhonePageState extends State<PhonePage> {
 
   @override
   Widget build(BuildContext context) {
-    final shown = rows.where((h) => q.isEmpty || '${h['name']} ${contactsOf(h).map((c) => '${c.label} ${c.digits}').join(' ')} ${h['note']}'.toLowerCase().contains(q.toLowerCase())).toList();
+    final shown = rows.where((h) {
+      if (_regionOf(h) != region) return false;
+      return q.isEmpty || '${h['name']} ${contactsOf(h).map((c) => '${c.label} ${c.digits}').join(' ')} ${h['note']}'.toLowerCase().contains(q.toLowerCase());
+    }).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Số ĐT Hub'), backgroundColor: _red, foregroundColor: Colors.white, actions: [
       ]),
       floatingActionButton: FloatingActionButton(backgroundColor: _red, foregroundColor: Colors.white, onPressed: () => edit(), child: const Icon(Icons.add_call)),
       body: Column(children: [
+        HubRegionBar(value: region, onChanged: (v) => setState(() => region = v)),
         Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => q = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Tìm hub / tên / số ĐT...', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(30))))),
         Expanded(child: shown.isEmpty ? const Center(child: Text('Chưa có số ĐT. Bấm + để thêm.')) : ListView(padding: const EdgeInsets.only(bottom: 90), children: [
           for (final h in shown) () {
@@ -112,7 +126,8 @@ class _PhonePageState extends State<PhonePage> {
 
 class PhoneDialog extends StatefulWidget {
   final Map<String, Object?>? item;
-  const PhoneDialog({super.key, this.item});
+  final String? region;
+  const PhoneDialog({super.key, this.item, this.region});
   @override
   State<PhoneDialog> createState() => _PhoneDialogState();
 }
@@ -160,7 +175,17 @@ class _PhoneDialogState extends State<PhoneDialog> {
           FilledButton(onPressed: () async {
             if (name.text.trim().isEmpty) return;
             final list = [for (final r in cs) r.saved ? (r.orig!.copy()..inactive = r.inactive) : Contact(title: r.title, name: r.name.text.trim(), phone: r.phone.text.trim())].where((c) => c.phone.isNotEmpty || c.name.isNotEmpty).toList();
-            await DB.savePhone({'id': widget.item?['id'], 'name': name.text.trim(), 'contacts': list, 'note': note.text.trim()});
+            final n = name.text.trim();
+            await DB.savePhone({'id': widget.item?['id'], 'name': n, 'contacts': list, 'note': note.text.trim()});
+            // Hub mới thêm từ ô đang chọn → gắn region (không đè region hub đã có).
+            if (widget.item == null && widget.region != null) {
+              final exist = (await DB.hubs()).where((h) => DB.key(h['name']) == DB.key(n)).toList();
+              if (exist.isEmpty) {
+                await DB.saveHub({'name': n, 'lat': null, 'lng': null, 'note': '', 'region': widget.region});
+              } else if ('${exist.first['region'] ?? ''}'.trim().isEmpty) {
+                await DB.saveHub({...exist.first, 'region': widget.region});
+              }
+            }
             if (context.mounted) Navigator.pop(context, true);
           }, child: const Text('LƯU')),
         ],

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'contacts.dart';
 import 'db.dart';
+import 'hub_region.dart';
 
 const hubDataRaw =
     'https://raw.githubusercontent.com/Nhanbvt/STN/main/data/hub_data.json';
@@ -16,6 +17,7 @@ double? _d(Object? v) =>
 class HubMergePlan {
   final hubInserts = <Map<String, Object?>>[];
   final hubLocUpdates = <(int, double, double)>[];
+  final hubRegionUpdates = <(int, String)>[];
   final phoneInserts = <(String, List<Contact>)>[];
   final phoneUpdates = <(int, List<Contact>)>[];
   /// Chỉ đếm số ĐT mới (chuẩn hoá, chưa có trên máy). Cờ Ko dùng / vị trí không tính.
@@ -24,6 +26,7 @@ class HubMergePlan {
   bool get isEmpty =>
       hubInserts.isEmpty &&
       hubLocUpdates.isEmpty &&
+      hubRegionUpdates.isEmpty &&
       phoneInserts.isEmpty &&
       phoneUpdates.isEmpty;
   String? get phoneNotice => newPhones > 0
@@ -54,21 +57,32 @@ HubMergePlan planHubMerge(List<Map<String, Object?>> hubs,
     final lat = _d(item['lat']), lng = _d(item['lng']);
     final h = hubBy[k];
     if (h == null) {
+      final remoteReg = '${item['region'] ?? ''}'.trim();
       final row = {
         'name': name,
         'lat': lat,
         'lng': lng,
-        'note': '${item['note'] ?? ''}'.trim()
+        'note': '${item['note'] ?? ''}'.trim(),
+        'region': (remoteReg == kRegionNoiThanh || remoteReg == kRegionNoiVung || remoteReg == kRegionSeller)
+            ? remoteReg
+            : classifyHubRegion(name),
       };
       p.hubInserts.add(row);
       hubBy[k] = row;
-    } else if (lat != null && lng != null && h['id'] is int) {
-      final ol = _d(h['lat']), og = _d(h['lng']);
-      if (ol == null ||
-          og == null ||
-          (ol - lat).abs() > 1e-7 ||
-          (og - lng).abs() > 1e-7)
-        p.hubLocUpdates.add((h['id'] as int, lat, lng));
+    } else if (h['id'] is int) {
+      if (lat != null && lng != null) {
+        final ol = _d(h['lat']), og = _d(h['lng']);
+        if (ol == null ||
+            og == null ||
+            (ol - lat).abs() > 1e-7 ||
+            (og - lng).abs() > 1e-7)
+          p.hubLocUpdates.add((h['id'] as int, lat, lng));
+      }
+      final remoteReg = '${item['region'] ?? ''}'.trim();
+      if (remoteReg == kRegionNoiThanh || remoteReg == kRegionNoiVung || remoteReg == kRegionSeller) {
+        final local = '${h['region'] ?? ''}'.trim();
+        if (local != remoteReg) p.hubRegionUpdates.add((h['id'] as int, remoteReg));
+      }
     }
     final inc = (item['contacts'] as List? ?? const [])
         .whereType<Map>()
@@ -126,6 +140,9 @@ Future<Map<String, dynamic>> buildHubData() async {
           'lat': h['lat'],
           'lng': h['lng'],
           'note': '${h['note'] ?? ''}',
+          'region': '${h['region'] ?? ''}'.trim().isEmpty
+              ? classifyHubRegion('${h['name'] ?? ''}')
+              : '${h['region']}'.trim(),
           'map': h['lat'] != null && h['lng'] != null
               ? 'https://maps.google.com/?q=${h['lat']},${h['lng']}'
               : '',
@@ -140,6 +157,7 @@ Future<Map<String, dynamic>> buildHubData() async {
             'lat': null,
             'lng': null,
             'note': '',
+            'region': classifyHubRegion('${r['name'] ?? ''}'),
             'map': '',
             'contacts': [for (final c in contactsOf(r)) c.toJson()]
           },
@@ -157,6 +175,9 @@ Future<void> applyHubPlan(HubMergePlan p) async {
   for (final u in p.hubLocUpdates) {
     b.update('hubs', {'lat': u.$2, 'lng': u.$3},
         where: 'id=?', whereArgs: [u.$1]);
+  }
+  for (final u in p.hubRegionUpdates) {
+    b.update('hubs', {'region': u.$2}, where: 'id=?', whereArgs: [u.$1]);
   }
   for (final (n, cs) in p.phoneInserts) {
     b.insert('phones', {
