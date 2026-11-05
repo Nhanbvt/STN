@@ -248,6 +248,7 @@ class _TripDialogState extends State<TripDialog> {
   late String route, vehicle;
   int? bandId;
   List<Band> bands = [];
+  bool _loaded = false;
   PlaceIndex places = placeCache;
   final _fn = <TextEditingController, FocusNode>{};
   @override
@@ -265,7 +266,7 @@ class _TripDialogState extends State<TripDialog> {
     route = t?.route ?? routeTypes[0];
     vehicle = t?.vehicle ?? widget.vehicle;
     bandId = t?.bandId;
-    () async { bands = await DB.bands(); places = placeCache = PlaceIndex([...await DB.places(), ...(await DB.hubs()).map((h) => '${h['name']}')]); final g = await DB.ghep(); gd = g.$1; gn = g.$2; if (mounted) setState(() {}); }();
+    () async { bands = await DB.bands(); places = placeCache = PlaceIndex([...await DB.places(), ...(await DB.hubs()).map((h) => '${h['name']}')]); final g = await DB.ghep(); gd = g.$1; gn = g.$2; _loaded = true; if (mounted) setState(() {}); }();
   }
 
   List<Band> get options => bands.where((b) => b.vehicle == vehicle && b.route == route).toList();
@@ -292,7 +293,8 @@ class _TripDialogState extends State<TripDialog> {
 
   @override
   Widget build(BuildContext context) {
-    if (!options.any((b) => b.id == bandId)) bandId = options.isEmpty ? null : options.first.id;
+    // Giữ nguyên mức đã lưu: chỉ tự chọn lại khi bảng giá đã tải xong mà mức cũ không thuộc loại xe/hành trình đang chọn
+    if (_loaded && !options.any((b) => b.id == bandId)) bandId = options.isEmpty ? null : options.first.id;
     return AlertDialog(
       title: Text(widget.trip == null ? 'Thêm Chuyến' : 'Sửa Chuyến', style: const TextStyle(color: kRed, fontWeight: FontWeight.bold)),
       content: SizedBox(width: 400, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
