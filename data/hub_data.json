@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1793770308153,
- "updatedAtIso": "2026-11-04T05:31:48.153754Z",
+ "updatedAt": 1794466422560,
+ "updatedAtIso": "2026-11-12T06:53:42.560847Z",
  "hubs": [
   {
    "name": "53-HCM Bulky DC",
@@ -1808,7 +1808,14 @@
    "lng": 106.7390898,
    "note": "1076 Nguyễn Văn Tạo, Xã Hiệp Phước, TP Hồ Chí Minh",
    "map": "https://maps.google.com/?q=10.617285,106.7390898",
-   "contacts": []
+   "contacts": [
+    {
+     "title": "Anh",
+     "name": "lâm",
+     "phone": "0345761660",
+     "active": true
+    }
+   ]
   },
   {
    "name": "Nha Be/Phu Xuan",
