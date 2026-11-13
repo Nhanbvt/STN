@@ -36,7 +36,9 @@ class Payroll {
   final double congNgay;
   /// Số ngày lễ trong tháng (mỗi ngày mặc định 1 công dù nghỉ).
   final int ngayLe;
-  /// Công thêm do đi làm ngày lễ (x2 công của ngày đó).
+  /// Công thưởng do đi làm ngày lễ. Ngày lễ đi làm = công ngày đó x3 (0.5→1.5, 1→3);
+  /// trong đó 1 công là công lễ mặc định (đã tính vào công chuẩn), phần còn lại (3c − 1)
+  /// là công thưởng trả theo đơn giá ngày, không tính vào công chuẩn/tăng ca.
   final double congLeThem;
   /// Phần công thường (≤ công chuẩn) và phần tăng ca (vượt công chuẩn, x2).
   final double congThuong, congTangCa;
@@ -67,7 +69,7 @@ class Payroll {
     for (final e in count.entries) {
       final c = vung.contains(e.key) || e.value >= 2 ? 1.0 : 0.5;
       if (holidays.contains(e.key)) {
-        leThem += 2 * c;
+        leThem += 3 * c - 1;
       } else {
         congNgay += c;
       }
@@ -77,10 +79,10 @@ class Payroll {
     return Payroll(days: count.length, trips: ts.length, tripMoney: ts.fold(0, (s, t) => s + t.price), congChuan: std, congNgay: congNgay, ngayLe: holidays.length, congLeThem: leThem, congThuong: thuong, congTangCa: base - thuong);
   }
 
-  /// Công của 1 ngày (để tô màu lịch): 0 / 0.5 / 1 (ngày thường), lễ: 1 / 2 / 3.
+  /// Công của 1 ngày (để tô màu lịch): 0 / 0.5 / 1 (ngày thường); lễ: nghỉ 1, đi làm 1.5 / 3.
   static double congOfDay(List<Trip> dayTrips, {bool holiday = false, bool Function(Trip)? isNoiVung}) {
     final nv = isNoiVung ?? tripIsNoiVung;
     final c = dayTrips.isEmpty ? 0.0 : dayTrips.any(nv) || dayTrips.length >= 2 ? 1.0 : 0.5;
-    return holiday ? 1 + 2 * c : c;
+    return holiday ? (c == 0 ? 1 : 3 * c) : c;
   }
 }

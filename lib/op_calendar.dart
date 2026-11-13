@@ -10,11 +10,11 @@ String _fmt(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStr
 Widget _legend(Color c, String t) => Row(mainAxisSize: MainAxisSize.min, children: [
       Container(width: 12, height: 12, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3))),
       const SizedBox(width: 4),
-      Text(t, style: const TextStyle(fontSize: 12)),
+      Flexible(child: Text(t, style: const TextStyle(fontSize: 12))),
     ]);
 
 // ---------------- Lịch vận hành ----------------
-/// Ô tím = ngày lễ (mặc định 1 công; đi làm = 3 công). Chạm 1 ngày để bật/tắt ngày lễ (lưu trong máy).
+/// Ô tím = ngày lễ (nghỉ = 1 công; đi làm = công ngày đó x3). Chạm 1 ngày để bật/tắt ngày lễ (lưu trong máy).
 class CalendarPage extends StatefulWidget {
   final List<Trip> trips;
   final DateTime month;
@@ -53,7 +53,7 @@ class _CalendarPageState extends State<CalendarPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
-        content: Text(on ? 'Đã đặt $d là ngày lễ (mặc định 1 công, đi làm = 3 công)' : 'Đã bỏ ngày lễ $d'),
+        content: Text(on ? 'Đã đặt $d là ngày lễ (nghỉ = 1 công, đi làm = công x3)' : 'Đã bỏ ngày lễ $d'),
         action: SnackBarAction(label: 'HOÀN TÁC', onPressed: () async {
           setState(() { if (before == null) { ov.remove(date); } else { ov[date] = before; } });
           if (widget.testOverrides == null) await DB.setHolidayOverride(date, before);
@@ -101,7 +101,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 padding: const EdgeInsets.all(2),
                 child: FittedBox(fit: BoxFit.scaleDown, child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Text('$d', style: TextStyle(fontWeight: FontWeight.bold, color: light ? Colors.white : Colors.black)),
-                  if (h) Text(n > 0 ? 'Lễ · ${_fmt(c)} công' : 'Lễ', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600))
+                  if (h) Text(n > 0 ? 'Lễ ${_fmt(c)}c' : 'Lễ', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600))
                   else if (n > 0) Text('$n cuốc', style: const TextStyle(fontSize: 10, color: Colors.white)),
                 ])),
               ),
@@ -113,7 +113,7 @@ class _CalendarPageState extends State<CalendarPage> {
           child: Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
             _legend(Colors.orange, '1 cuốc Nội thành = 0.5 công'),
             _legend(Colors.green, '≥2 cuốc hoặc Nội vùng = 1 công'),
-            _legend(kHolidayColor, 'Ngày lễ: nghỉ = 1 công, đi làm = 3 công'),
+            _legend(kHolidayColor, 'Ngày lễ: nghỉ = 1 công, đi làm = công x3 (1 cuốc 1.5, ≥2 cuốc 3)'),
             const Text('Chạm vào ngày để bật/tắt ngày lễ', style: TextStyle(fontSize: 12, color: Colors.black54, fontStyle: FontStyle.italic)),
           ]),
         ),

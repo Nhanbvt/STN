@@ -54,7 +54,7 @@ void main() {
     expect(p.congNgay, 1);
     // 1/5 là ngày lễ dù ghi '2026-5-1'
     final q = Payroll.of([nt('2026-5-1'), nt('2026-05-01')], month: DateTime(2026, 5), holidays: holidaysInMonth(DateTime(2026, 5), const {}));
-    expect(q.congLeThem, 2);
+    expect(q.congLeThem, 2); // 2 chuyến ngày lễ = 3 công = 1 + 2 thưởng
   });
 
   group('ngày lễ', () {
@@ -68,18 +68,25 @@ void main() {
       expect(p.luong, (3 * 5310000 / 26).round());
       expect(p.tienLe, 0);
     });
-    test('đi làm ngày lễ cả ngày = 3 công (1 mặc định + x2)', () {
+    test('đi làm ngày lễ cả ngày = 1 × 3 = 3 công (1 vào công chuẩn + 2 thưởng)', () {
       final p = Payroll.of([nv('2026-09-02')], month: DateTime(2026, 9), holidays: {'2026-09-02'});
       expect(p.cong, 3);
+      expect(p.congThuong, 1);
       expect(p.congLeThem, 2);
       expect(p.luong, (5310000 / 26).round());
       expect(p.tienLe, (2 * 5310000 / 26).round());
       expect(p.tong, 100 + p.luong + p.tienLe);
       expect(Payroll.congOfDay([nv('2026-09-02')], holiday: true), 3);
     });
-    test('đi 1 chuyến nội thành ngày lễ = 1 + 2×0.5 = 2 công', () {
-      expect(Payroll.congOfDay([nt('2026-09-02')], holiday: true), 2);
+    test('đi 1 chuyến nội thành ngày lễ = 0.5 × 3 = 1.5 công (1 + 0.5 thưởng)', () {
+      expect(Payroll.congOfDay([nt('2026-09-02')], holiday: true), 1.5);
+      expect(Payroll.congOfDay([nt('2026-09-02'), nt('2026-09-02')], holiday: true), 3);
       expect(Payroll.congOfDay([], holiday: true), 1);
+      final p = Payroll.of([nt('2026-09-02')], month: DateTime(2026, 9), holidays: {'2026-09-01', '2026-09-02'});
+      expect(p.cong, 2.5); // 1/9 nghỉ = 1, 2/9 đi 1 chuyến = 1.5
+      expect(p.congThuong, 2);
+      expect(p.congLeThem, 0.5);
+      expect(p.tienLe, (0.5 * 5310000 / 26).round());
     });
   });
 
