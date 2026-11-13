@@ -9,8 +9,9 @@ void main() {
     ts.add(Trip(date: '2026-10-29', route: 'x', from: ['a'], to: ['b'], vehicle: vehicles[0]));
     final p = Payroll.of(ts);
     expect(p.cong, 28.5);
+    expect(p.congChuan, 27); // tháng 10 có 31 ngày
     expect(p.luong, 5310000);
-    expect(p.tangCa, (2.5 * 5310000 / 26 * 2).round());
+    expect(p.tangCa, (1.5 * 5310000 / 27 * 2).round());
   });
   test('version compare', () {
     expect(compareVersions('1.0.12', '1.0.9'), 1);

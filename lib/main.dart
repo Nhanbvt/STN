@@ -14,6 +14,8 @@ import 'db.dart';
 import 'hub_sync.dart';
 import 'contact_upload.dart';
 import 'place_search.dart';
+import 'holidays.dart';
+import 'op_calendar.dart';
 
 const kRed = Color(0xFFD32F2F);
 const kOrange = Color(0xFFFF7043);
@@ -63,6 +65,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   void dispose() { WidgetsBinding.instance.removeObserver(this); hideMoney.removeListener(_onHide); super.dispose(); }
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
   List<Trip> all = [];
+  Map<String, bool> hol = {};
+  Map<String, String> hubRegion = {};
   String q = '', name = '', driverId = '', vehicle = vehicles[0];
 
   @override
@@ -70,16 +74,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> load() async {
     all = await DB.trips();
+    hol = await DB.holidayOverrides();
+    hubRegion = {for (final h in await DB.hubs()) '${h['name']}'.trim().toLowerCase(): '${h['region'] ?? ''}'};
     name = await DB.get('name'); driverId = await DB.get('driver_id'); vehicle = await DB.get('vehicle', vehicles[0]);
     if (mounted) setState(() {});
   }
 
-  List<Trip> get monthTrips => all.where((t) => t.date.startsWith(DateFormat('yyyy-MM').format(month))).toList();
+  List<Trip> get monthTrips => all.where((t) => normDate(t.date).startsWith(DateFormat('yyyy-MM').format(month))).toList();
+  Payroll get payroll => Payroll.of(monthTrips, month: month, holidays: holidaysInMonth(month, hol), isNoiVung: (t) => tripIsNoiVung(t, hubRegion));
 
   @override
   Widget build(BuildContext context) {
     final mt = monthTrips;
-    final p = Payroll.of(mt);
+    final p = payroll;
     final shown = mt.where((t) => q.isEmpty || '${t.note} ${t.fromText} ${t.toText}'.toLowerCase().contains(q.toLowerCase())).toList();
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -118,10 +125,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               const SizedBox(height: 10),
               Wrap(spacing: 18, runSpacing: 6, children: [
                 stat('Số chuyến', hideMoney.value ? '****' : '${p.trips}'),
-                stat('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
+                stat('Ngày công', '${fmtNum(p.cong)}/${p.congChuan}'),
                 stat('Tiền chuyến', vndH(p.tripMoney)),
                 stat('Tiền công', vnd(p.luong)),
                 if (p.congTangCa > 0) stat('Tăng ca (${fmtNum(p.congTangCa)} công x2)', vnd(p.tangCa)),
+                if (p.congLeThem > 0) stat('Làm ngày lễ (+${fmtNum(p.congLeThem)} công)', vnd(p.tienLe)),
               ]),
               const SizedBox(height: 8),
               Center(child: Column(children: [
@@ -198,9 +206,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> menu(String v) async {
     switch (v) {
-      case 'stats': await Navigator.push(context, MaterialPageRoute(builder: (_) => StatsPage(trips: monthTrips, month: month)));
+      case 'stats': await Navigator.push(context, MaterialPageRoute(builder: (_) => StatsPage(trips: monthTrips, month: month, payroll: payroll)));
       case 'fuel': await showDialog(context: context, builder: (_) => const FuelDialog());
-      case 'cal': await Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarPage(trips: all, month: month)));
+      case 'cal': await Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarPage(trips: all, month: month, hubRegion: hubRegion)));
       case 'about': await showAppInfo(context);
       case 'update': await checkForUpdate(context, silent: false);
       case 'phone': await Navigator.push(context, MaterialPageRoute(builder: (_) => const PhonePage()));
@@ -408,7 +416,8 @@ class _FuelDialogState extends State<FuelDialog> {
 class StatsPage extends StatefulWidget {
   final List<Trip> trips;
   final DateTime month;
-  const StatsPage({super.key, required this.trips, required this.month});
+  final Payroll payroll;
+  const StatsPage({super.key, required this.trips, required this.month, required this.payroll});
   @override
   State<StatsPage> createState() => _StatsPageState();
 }
@@ -425,7 +434,7 @@ class _StatsPageState extends State<StatsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final p = Payroll.of(widget.trips);
+    final p = widget.payroll;
     final (s, e) = fuelPeriod(periodStart);
     final inP = fuels.where((f) { final d = DateTime.parse(f.date); return !d.isBefore(s) && !d.isAfter(e); }).toList();
     final tl = inP.fold<double>(0, (a, f) => a + f.liters), tk = inP.fold<double>(0, (a, f) => a + f.km);
@@ -439,10 +448,12 @@ class _StatsPageState extends State<StatsPage> {
           ListTile(title: Text('Tháng ${widget.month.month}/${widget.month.year}', style: const TextStyle(fontWeight: FontWeight.bold, color: kRed))),
           row('Số ngày chạy', '${p.days}'),
           row('Số chuyến', hideMoney.value ? '****' : '${p.trips}'),
-          row('Ngày công', '${fmtNum(p.cong)}/$congChuan'),
+          row('Ngày công', '${fmtNum(p.cong)}/${p.congChuan}'),
+          if (p.ngayLe > 0) row('Ngày lễ (mặc định 1 công/ngày)', '${p.ngayLe}', Colors.purple),
           row('Tiền chuyến', vndH(p.tripMoney), Colors.blue),
-          row('Tiền công (${fmtNum(p.congThuong)} công)', vnd(p.luong)),
+          row('Tiền công (${fmtNum(p.congThuong)} công × ${vnd(p.donGia)})', vnd(p.luong)),
           if (p.congTangCa > 0) row('Tăng ca (${fmtNum(p.congTangCa)} công x2)', vnd(p.tangCa), Colors.deepOrange),
+          if (p.congLeThem > 0) row('Làm ngày lễ (+${fmtNum(p.congLeThem)} công)', vnd(p.tienLe), Colors.purple),
           row('TỔNG', vndH(p.tong), kRed),
         ])),
         Card(child: Column(children: [
@@ -464,48 +475,6 @@ class _StatsPageState extends State<StatsPage> {
           ),
           TextButton.icon(onPressed: () async { await showDialog(context: context, builder: (_) => const FuelDialog()); load(); }, icon: const Icon(Icons.add), label: const Text('Cập nhật đổ xăng')),
         ])),
-      ]),
-    );
-  }
-}
-
-// ---------------- Lịch ----------------
-class CalendarPage extends StatefulWidget {
-  final List<Trip> trips;
-  final DateTime month;
-  const CalendarPage({super.key, required this.trips, required this.month});
-  @override
-  State<CalendarPage> createState() => _CalendarPageState();
-}
-
-class _CalendarPageState extends State<CalendarPage> {
-  late DateTime m = widget.month;
-  @override
-  Widget build(BuildContext context) {
-    final count = <String, int>{};
-    for (final t in widget.trips) { count[t.date] = (count[t.date] ?? 0) + 1; }
-    final first = DateTime(m.year, m.month, 1), days = DateTime(m.year, m.month + 1, 0).day, lead = first.weekday - 1;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Lịch vận hành'), backgroundColor: kRed, foregroundColor: Colors.white),
-      body: Column(children: [
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconButton(onPressed: () => setState(() => m = DateTime(m.year, m.month - 1)), icon: const Icon(Icons.chevron_left)),
-          Text('Tháng ${m.month}/${m.year}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          IconButton(onPressed: () => setState(() => m = DateTime(m.year, m.month + 1)), icon: const Icon(Icons.chevron_right)),
-        ]),
-        Row(children: [for (final d in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']) Expanded(child: Center(child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold))))]),
-        Expanded(child: GridView.count(crossAxisCount: 7, padding: const EdgeInsets.all(4), children: [
-          for (var i = 0; i < lead; i++) const SizedBox(),
-          for (var d = 1; d <= days; d++) () {
-            final n = count[ymd(DateTime(m.year, m.month, d))] ?? 0;
-            return Container(margin: const EdgeInsets.all(2), decoration: BoxDecoration(color: n >= 2 ? Colors.green : n == 1 ? Colors.orange : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text('$d', style: TextStyle(fontWeight: FontWeight.bold, color: n > 0 ? Colors.white : Colors.black)),
-                  if (n > 0) Text('$n cuốc', style: const TextStyle(fontSize: 10, color: Colors.white)),
-                ]));
-          }(),
-        ])),
-        const Padding(padding: EdgeInsets.all(12), child: Text('🟧 1 cuốc = 0.5 công    🟩 ≥2 cuốc = 1 công')),
       ]),
     );
   }

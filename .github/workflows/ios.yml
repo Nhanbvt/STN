@@ -86,10 +86,10 @@ jobs:
           name: Sổ Thu Nhập ${{ env.VER }}
           body: |
             [show] Bản mới:
-            • Vị trí Hub và Số ĐT Hub chia 3 ô: Nội thành, Nội vùng, Seller
-            • Thêm đầy đủ hub miền Nam (Nội vùng) kèm định vị
-            • Hub Long An, Tiền Giang, Bến Tre chuyển sang Nội vùng (giữ nguyên số và định vị đã lưu)
-            • Thêm HCM Mega SOC vào Nội thành
-            • Sửa lỗi mở xem/sửa chuyến bị nhảy giá về 71k
+            • Cách tính công mới: tháng 31 ngày = 27 công, tháng 30 ngày và tháng 2 = 26 công; lương tính từ ngày 1 đến cuối tháng
+            • Mỗi ngày tối đa 1 công: 1 chuyến Nội thành = 0,5 công, từ 2 chuyến = 1 công; có chuyến Nội vùng = 1 công
+            • Ngày lễ theo quy định nhà nước (Tết Dương lịch, Tết Âm lịch, Giỗ Tổ, 30/4, 1/5, 2/9, 24/11) mặc định 1 công; đi làm ngày lễ = 3 công
+            • Lịch vận hành: ngày lễ tô màu tím; chạm vào một ngày để thêm hoặc bỏ ngày lễ nếu lịch thiếu
+            • Dữ liệu chuyến cũ giữ nguyên, chỉ tính lại công theo cách mới
           files: SoThuNhap-${{ env.VER }}.apk
           make_latest: true

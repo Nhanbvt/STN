@@ -5,12 +5,12 @@ import 'hub_seed.dart';
 import 'hub_seed_vung.dart';
 import 'hub_region.dart';
 import 'price_table.dart';
+export 'payroll.dart';
 
 const vehicles = ['Xe Van < 1 Tấn', 'Xe Tải 2 Tấn', 'Xe Tải 5 Tấn', 'Xe Tải 8 Tấn'];
 const routeTypes = ['Nội Thành', 'Nội Vùng', 'Liên Vùng'];
 const noiThanhMultiplier = 1.28;
 const luongThang = 5310000;
-const congChuan = 26;
 const dinhMuc = 12.5; // L/100km
 
 class Band {
@@ -52,7 +52,7 @@ class DB {
   static late Database db;
   static Future<void> init() async {
     // QUY TẮC: migration chỉ được THÊM (bảng/cột mới), không xoá dữ liệu người dùng.
-    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 6, onUpgrade: (d, o, n) async {
+    db = await openDatabase(p.join(await getDatabasesPath(), 'so_thu_nhap.db'), version: 7, onUpgrade: (d, o, n) async {
       if (o < 2) await seedPrices(d, migrate: true);
       if (o < 3) { await d.execute(_hubSql); await dedupe(d); }
       if (o < 4) await d.execute(_phoneSql);
@@ -73,9 +73,11 @@ class DB {
           await d.update('hubs', {'region': classifyHubRegion('${r['name']}')}, where: 'id=?', whereArgs: [r['id']]);
         }
       }
+      if (o < 7) await d.execute(_holidaySql); // ngày lễ chỉnh tay (bảng mới, không đụng dữ liệu cũ)
     }, onCreate: (d, v) async {
       await d.execute(_hubSql);
       await d.execute(_phoneSql);
+      await d.execute(_holidaySql);
       await d.execute('CREATE TABLE trips(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, route TEXT, from_pts TEXT, to_pts TEXT, band_id INTEGER, price INTEGER, note TEXT, vehicle TEXT)');
       await d.execute('CREATE TABLE bands(id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle TEXT, route TEXT, label TEXT, base_price INTEGER, placeholder INTEGER)');
       await d.execute('CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, liters REAL, km REAL)');
@@ -107,6 +109,17 @@ class DB {
     _needRecompute = true;
   }
   static bool _needRecompute = false;
+  /// Ngày lễ chỉnh tay: is_holiday 1 = thêm, 0 = bỏ ngày lễ có sẵn.
+  static const _holidaySql = 'CREATE TABLE IF NOT EXISTS holiday_overrides(date TEXT PRIMARY KEY, is_holiday INTEGER)';
+  static Future<Map<String, bool>> holidayOverrides() async => {for (final r in await db.query('holiday_overrides')) '${r['date']}': r['is_holiday'] == 1};
+  /// [value] null = xoá ghi đè (về theo danh sách có sẵn).
+  static Future<void> setHolidayOverride(String date, bool? value) async {
+    if (value == null) {
+      await db.delete('holiday_overrides', where: 'date=?', whereArgs: [date]);
+    } else {
+      await db.insert('holiday_overrides', {'date': date, 'is_holiday': value ? 1 : 0}, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
   static const _hubSql = 'CREATE TABLE IF NOT EXISTS hubs(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lng REAL, note TEXT, region TEXT)';
 
   static String tripKey(Map t) => '${t['note'] ?? ''}'.trim().isNotEmpty
@@ -328,7 +341,7 @@ class DB {
 
   static Future<Map<String, dynamic>> exportAll() async => {
         'app': 'so_thu_nhap', 'version': 1,
-        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) t: t == 'settings' ? await db.query(t, where: "k NOT LIKE 'admin_%' AND k != 'hub_data_applied'") : await db.query(t),
+        for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones', 'holiday_overrides']) t: t == 'settings' ? await db.query(t, where: "k NOT LIKE 'admin_%' AND k != 'hub_data_applied'") : await db.query(t),
       };
   /// Nhận dạng file: định dạng của app này (có 'app') hoặc app Android cũ (trips có 'tripCode').
   static bool isOldFormat(Map<String, dynamic> d) => d['trips'] is List && (d['trips'] as List).isNotEmpty && (d['trips'] as List).first is Map && ((d['trips'] as List).first as Map).containsKey('tripCode');
@@ -392,7 +405,7 @@ class DB {
 
   static Future<void> importAll(Map<String, dynamic> data) async {
     await db.transaction((tx) async {
-      for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones']) {
+      for (final t in ['trips', 'bands', 'fuel', 'places', 'settings', 'hubs', 'phones', 'holiday_overrides']) {
         if (data[t] is! List) continue;
         final keep = t == 'settings';
         await (keep ? tx.delete(t, where: "k NOT LIKE 'admin_%' AND k != 'hub_data_applied'") : tx.delete(t));
@@ -418,24 +431,6 @@ class DB {
     }
     await recomputeAll();
     return n;
-  }
-}
-
-/// Công & lương cho danh sách chuyến (đã lọc theo tháng).
-class Payroll {
-  final int days, trips, tripMoney;
-  final double cong, congThuong, congTangCa;
-  Payroll(this.days, this.trips, this.tripMoney, this.cong, this.congThuong, this.congTangCa);
-  static double get donGia => luongThang / congChuan;
-  int get luong => (congThuong * donGia).round();
-  int get tangCa => (congTangCa * donGia * 2).round();
-  int get tong => tripMoney + luong + tangCa;
-  static Payroll of(List<Trip> ts) {
-    final perDay = <String, int>{};
-    for (final t in ts) { perDay[t.date] = (perDay[t.date] ?? 0) + 1; }
-    final cong = perDay.values.fold<double>(0, (s, n) => s + (n >= 2 ? 1 : 0.5));
-    final thuong = cong > congChuan ? congChuan.toDouble() : cong;
-    return Payroll(perDay.length, ts.length, ts.fold(0, (s, t) => s + t.price), cong, thuong, cong - thuong);
   }
 }
 
