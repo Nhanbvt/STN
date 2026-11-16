@@ -1,7 +1,7 @@
 {
  "version": 1,
- "updatedAt": 1794466422560,
- "updatedAtIso": "2026-11-12T06:53:42.560847Z",
+ "updatedAt": 1794834506096,
+ "updatedAtIso": "2026-11-16T13:08:26.096000Z",
  "hubs": [
   {
    "name": "53-HCM Bulky DC",
@@ -1013,7 +1013,13 @@
    "lng": 106.7100771,
    "note": "37 Bế Văn Cấm, Tân Kiểng, Quận 7, Thành phố Hồ Chí Minh, Việt Nam",
    "map": "https://maps.google.com/?q=10.7499881,106.7100771",
-   "contacts": []
+   "contacts": [
+    {
+     "name": "d7 hub",
+     "phone": "0886542911",
+     "active": true
+    }
+   ]
   },
   {
    "name": "D7/Bui Van Ba mới hoạt động 28/3",
@@ -2197,7 +2203,13 @@
    "lng": 106.7736961,
    "note": "Số 3 đường 15, P.Linh Xuân, TP.HCM",
    "map": "https://maps.google.com/?q=10.8686042,106.7736961",
-   "contacts": []
+   "contacts": [
+    {
+     "name": "Linh Trung 1",
+     "phone": "0343603799",
+     "active": true
+    }
+   ]
   },
   {
    "name": "Thu Duc/Linh Xuan",
